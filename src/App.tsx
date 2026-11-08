@@ -882,60 +882,32 @@ export default function App() {
   const [ytSearchError, setYtSearchError] = useState<string | null>(null);
   const [playingYouTubePostId, setPlayingYouTubePostId] = useState<string | null>(null);
 
-  // Private Messages State - Preserved in sessionStorage for this browser tab session;
-  // Automatically wiped by the browser when the tab/browser is closed permanently,
-  // or on direct explicit logout!
-  const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('soqoor_private_messages');
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [];
-  });
+  // Private Messages State - Clean start mode (no past messages backfilled on entrance)
+  const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
   const privateMessagesRef = useRef<PrivateMessage[]>(privateMessages);
   useEffect(() => {
     privateMessagesRef.current = privateMessages;
-    try {
-      if (privateMessages.length > 0) {
-        sessionStorage.setItem('soqoor_private_messages', JSON.stringify(privateMessages.slice(-300)));
-      } else {
-        sessionStorage.removeItem('soqoor_private_messages');
-      }
-    } catch {}
   }, [privateMessages]);
   const [selectedPmUser, setSelectedPmUser] = useState<User | null>(null);
   const selectedPmUserRef = useRef<User | null>(null);
   const [pmWindowMode, setPmWindowMode] = useState<'split' | 'full'>('split');
   const [pmInput, setPmInput] = useState('');
-  const [unreadPerUser, setUnreadPerUser] = useState<Record<string, number>>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('soqoor_unread_pm');
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return {};
-  });
+  const [unreadPerUser, setUnreadPerUser] = useState<Record<string, number>>({});
 
   useEffect(() => {
     selectedPmUserRef.current = selectedPmUser;
     if (selectedPmUser?.username) {
-      socket?.emit('getPrivateChatHistory', { partnerUsername: selectedPmUser.username });
+      // Clean Start: Do not recall past message history from server, start fresh
       setUnreadPerUser((prev) => {
         if (!prev[selectedPmUser.username]) return prev;
         const updated = { ...prev };
         const cleared = updated[selectedPmUser.username] || 0;
         delete updated[selectedPmUser.username];
         setNotificationCount((c) => Math.max(0, c - cleared));
-        try {
-          sessionStorage.setItem('soqoor_unread_pm', JSON.stringify(updated));
-        } catch {}
         return updated;
       });
     }
-  }, [selectedPmUser, socket]);
+  }, [selectedPmUser]);
   const [pmReplyingTo, setPmReplyingTo] = useState<{ id: string; username: string; text: string } | null>(null);
   const [isPmRecordingVoice, setIsPmRecordingVoice] = useState(false);
   const [pmSelfDestructSeconds, setPmSelfDestructSeconds] = useState<number>(0);
@@ -5970,27 +5942,18 @@ export default function App() {
                 <span className="text-[10px] shrink-0">{selectedPmUser.flag}</span>
               </div>
               <div className="text-[9px] text-slate-400 flex items-center gap-1 leading-none">
-                {Boolean(pmTypingUsers[selectedPmUser.username.trim().toLowerCase()]) ? (
-                  <span className="text-amber-400 font-bold flex items-center gap-0.5 animate-pulse">
-                    <span>يكتب الآن...</span>
-                    <span className="w-1 h-1 rounded-full bg-amber-400 animate-ping" />
-                  </span>
-                ) : (
-                  <>
-                    {(() => {
-                      const matched = allConnectedUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase()) || rosterUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase());
-                      const state = matched?.presenceState || selectedPmUser.presenceState || (matched ? 'online' : 'offline');
-                      return state === 'away' ? (
-                        <span className="text-amber-400 font-bold">انتظار 🟡</span>
-                      ) : state === 'offline' ? (
-                        <span className="text-slate-400">أوفلاين ⚪</span>
-                      ) : (
-                        <span className="text-emerald-400 font-bold">متصل 🟢</span>
-                      );
-                    })()}
-                    {selectedPmUser.statusQuote && <span className="truncate max-w-[60px] sm:max-w-[90px] text-slate-400">• {selectedPmUser.statusQuote}</span>}
-                  </>
-                )}
+                {(() => {
+                  const matched = allConnectedUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase()) || rosterUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase());
+                  const state = matched?.presenceState || selectedPmUser.presenceState || (matched ? 'online' : 'offline');
+                  return state === 'away' ? (
+                    <span className="text-amber-400 font-bold">انتظار 🟡</span>
+                  ) : state === 'offline' ? (
+                    <span className="text-slate-400">أوفلاين ⚪</span>
+                  ) : (
+                    <span className="text-emerald-400 font-bold">متصل 🟢</span>
+                  );
+                })()}
+                {selectedPmUser.statusQuote && <span className="truncate max-w-[60px] sm:max-w-[90px] text-slate-400">• {selectedPmUser.statusQuote}</span>}
               </div>
             </div>
           </div>
@@ -7700,7 +7663,7 @@ export default function App() {
         
         {/* 1. TOP-DOCKED SPLIT PM WINDOW (Docks from the very top, covering mics/header for maximum space!) */}
         {activeDrawer === 'pm' && selectedPmUser && pmWindowMode === 'split' ? (
-          <div className={`h-[50%] flex-shrink-0 ${curTheme.drawerBg || 'bg-slate-900'} border-b-2 border-amber-500 shadow-2xl flex flex-col min-h-0 overflow-hidden relative z-30 text-right animate-in slide-in-from-top duration-150`}>
+          <div className={`h-[50%] flex-shrink-0 ${curTheme.drawerBg || 'bg-slate-900'} border-b-2 ${curTheme.headerBorder || 'border-amber-500'} shadow-2xl flex flex-col min-h-0 overflow-hidden relative z-30 text-right animate-in slide-in-from-top duration-150`}>
             {renderActivePmThreadContent(true)}
           </div>
         ) : (
@@ -8064,37 +8027,8 @@ export default function App() {
         {/* PUBLIC ROOM MESSAGES CONTAINER (takes remaining 50% in split mode, full height in normal mode) */}
         <div className="flex-1 flex flex-col min-h-0 relative">
 
-          {/* SLIM ROOM INDICATOR BAR IN SPLIT MODE */}
-          {activeDrawer === 'pm' && selectedPmUser && pmWindowMode === 'split' && (
-            <div className="flex-shrink-0 px-2.5 py-1 bg-[#17110c] border-b border-amber-500/40 flex items-center justify-between text-[10px] z-20 shadow-xs">
-              <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                <Users className="w-3.5 h-3.5 text-amber-400" />
-                <span>{currentUser.room || 'الغرفة العامة'}</span>
-                <span className="text-slate-400 font-normal">({onlineCount} متواجد)</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[9px] text-emerald-400 font-bold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>دردشة الغرفة العامة (رد وإرسال)</span>
-              </div>
-            </div>
-          )}
-
-          {/* TOP RIGHT FLOATING CONTROLS: 1. ترسانة الميزات 50+  2. أدوات حسان برو  3. جرس الفلتر */}
-          <div className={`absolute ${
-            activeDrawer === 'pm' && selectedPmUser && pmWindowMode === 'split'
-              ? 'top-1 right-2 flex-row-reverse gap-1.5 z-30'
-              : 'top-2.5 right-3 flex-col gap-2 z-30'
-          } flex items-center pointer-events-auto`}>
-            {/* 50+ MEGA ARSENAL QUICK LAUNCH BUTTON (ترسانة الميزات الـ 50 الفائقة) */}
-            <button
-              type="button"
-              onClick={() => setShowUltimateFeatures50(true)}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 text-slate-950 font-black border border-amber-300 shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all cursor-pointer animate-pulse"
-              title="ترسانة الميزات الـ 50 الشاملة (Mega Suite 50+)"
-            >
-              <Sparkles className="w-4 h-4 text-slate-950" />
-            </button>
-
+          {/* TOP RIGHT FLOATING CONTROLS: أدوات وميزات حسان برو ⚡ (تحتوي ترسانة الميزات الـ 50 بداخلها) */}
+          <div className="absolute top-2.5 right-3 flex items-center pointer-events-auto z-30">
             {/* CONSOLIDATED COMPACT TOOLS TRIGGER (أيقونة أدوات حسان برو ⚡) */}
             <div className="relative">
               <button

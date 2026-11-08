@@ -64,6 +64,20 @@ export interface ThemeDefinition {
 }
 
 export const THEMES_LIST: ThemeDefinition[] = [
+  // 🪞 ثيم الرصاصي اللؤلؤي الهادئ (ألوان متناسقة ومريحة للعين)
+  {
+    id: 'pearl-gray-calm',
+    name: 'الرصاصي اللؤلؤي الهادئ (ألوان متناسقة وجذابة) 🪞🕊️',
+    bg: 'bg-[#e2e8f0]',
+    primary: 'border-slate-400 text-slate-800',
+    accent: '#475569',
+    colors: ['#f8fafc', '#e2e8f0', '#94a3b8', '#475569', '#1e293b'],
+    category: 'royal',
+    badge: 'رصاصي لؤلؤي هادئ',
+    fieldDesc: 'درجات رمادية لؤلؤية هادئة مع حواف ناعمة وأزرار متناسقة وخط فاحم مريح جداً للقراءة',
+    recommendedFontColor: '#0f172a',
+    recommendedNameColor: '#1e293b'
+  },
   // 📄 الثيم الرسمي الفاتح (خطوط سوداء فائقة الوضوح)
   {
     id: 'official-pure-light',

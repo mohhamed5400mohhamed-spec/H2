@@ -37,6 +37,39 @@ export interface ThemeFullStyle {
 }
 
 export const THEME_STYLES: Record<ThemeId, ThemeFullStyle> = {
+  // 🪞 ثيم الرصاصي اللؤلؤي الهادئ (ألوان متناسقة ومريحة للعين وحواف جذابة)
+  'pearl-gray-calm': {
+    headerBg: 'bg-[#e2e8f0]',
+    headerBorder: 'border-slate-300 shadow-xs',
+    headerAccent: 'text-slate-800 font-extrabold',
+    subHeaderBg: 'bg-[#cbd5e1]',
+    subHeaderBorder: 'border-slate-300',
+    subHeaderText: 'text-slate-800 font-bold',
+    bottomBarBg: 'bg-[#e2e8f0]',
+    bottomBarBorder: 'border-slate-300',
+    bottomBarText: 'text-slate-800 font-bold',
+    inputBarBg: 'bg-[#f1f5f9]',
+    inputBarBorder: 'border-slate-300 shadow-2xs',
+    primaryBtn: 'bg-slate-700 hover:bg-slate-800 text-white font-bold shadow-xs',
+    appBg: 'bg-[#f1f5f9]',
+    appText: 'text-slate-800 font-bold',
+    chatBg: 'bg-[#e8ecf2]',
+    drawerBg: 'bg-[#f1f5f9] text-slate-800',
+    drawerHeaderBg: 'bg-[#e2e8f0] text-slate-800 border-b border-slate-300',
+    cardBg: 'bg-white',
+    cardBorder: 'border-slate-300 shadow-2xs',
+    accentText: 'text-slate-700 font-black',
+    bubbleTheme: 'border-slate-300 text-slate-900 bg-white shadow-2xs font-semibold',
+    accentColor: '#475569',
+    bgColorHex: '#e8ecf2',
+    fieldBg: 'bg-white',
+    fieldBorder: 'border-slate-300 shadow-2xs',
+    fieldFocus: 'focus:border-slate-600 focus:ring-1 focus:ring-slate-400',
+    fieldText: 'text-slate-900 font-bold',
+    fieldPlaceholder: 'placeholder-slate-400',
+    recommendedTextColor: '#0f172a',
+    recommendedNameColor: '#1e293b'
+  },
   // 📄 1. الثيم الرسمي الفاتح (خلفيات ناصعة + خطوط سوداء فاحمة عالية التباين)
   'official-pure-light': {
     headerBg: 'bg-white',
