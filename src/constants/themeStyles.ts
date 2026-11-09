@@ -1080,3 +1080,261 @@ export function buildThemeDefinitionFromCustom(preset: CustomThemePreset): Theme
   };
 }
 
+/**
+ * Standard WCAG 2.0 / 2.1 Relative Luminance Calculation
+ * حساب درجة السطوع النسبي للون وفق معايير إمكانية الوصول العالمية (Luminance)
+ * @returns قيمة عشرية بين 0.0 (أسود تماماً) و 1.0 (أبيض تماماً)
+ */
+export function calculateColorLuminance(color?: string): number {
+  if (!color) return 1.0;
+  const raw = color.trim().toLowerCase();
+
+  // Known named color fast mappings
+  const knownMap: Record<string, [number, number, number]> = {
+    white: [255, 255, 255],
+    black: [0, 0, 0],
+    transparent: [255, 255, 255],
+    'slate-950': [2, 6, 23],
+    'slate-900': [15, 23, 42],
+    'slate-800': [30, 41, 59],
+    'slate-700': [51, 65, 85],
+    'slate-600': [71, 85, 105],
+    'slate-500': [100, 116, 139],
+    'slate-400': [148, 163, 184],
+    'slate-300': [203, 213, 225],
+    'slate-200': [226, 232, 240],
+    'slate-100': [241, 245, 249],
+    'slate-50': [248, 250, 252],
+    'amber-50': [255, 251, 235],
+    'amber-100': [254, 243, 199],
+    'amber-200': [253, 230, 138],
+    'amber-900': [120, 53, 15],
+    'amber-950': [69, 26, 3],
+    'rose-50': [255, 241, 242],
+    'rose-100': [255, 228, 230]
+  };
+
+  let r = 255;
+  let g = 255;
+  let b = 255;
+
+  // Check if string contains hex code e.g. bg-[#161f33] or #ffffff
+  const hexMatch = raw.match(/#([0-9a-f]{3,8})/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    if (hex.length === 3 || hex.length === 4) {
+      r = parseInt(hex[0] + hex[0], 16);
+      g = parseInt(hex[1] + hex[1], 16);
+      b = parseInt(hex[2] + hex[2], 16);
+    } else {
+      r = parseInt(hex.slice(0, 2), 16) || 0;
+      g = parseInt(hex.slice(2, 4), 16) || 0;
+      b = parseInt(hex.slice(4, 6), 16) || 0;
+    }
+  } else {
+    // Check rgb / rgba e.g. rgb(245, 158, 11) or rgba(0, 0, 0, 0.5)
+    const rgbMatch = raw.match(/rgba?\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)/i);
+    if (rgbMatch) {
+      r = parseInt(rgbMatch[1], 10) || 0;
+      g = parseInt(rgbMatch[2], 10) || 0;
+      b = parseInt(rgbMatch[3], 10) || 0;
+    } else {
+      // Lookup known names or tailwind classes
+      const matchedKey = Object.keys(knownMap).find((k) => raw.includes(k));
+      if (matchedKey) {
+        [r, g, b] = knownMap[matchedKey];
+      } else {
+        return 0.5; // fallback neutral
+      }
+    }
+  }
+
+  // Convert to sRGB and linearize (WCAG 2.1 formula)
+  const sR = r / 255;
+  const sG = g / 255;
+  const sB = b / 255;
+  const rLin = sR <= 0.03928 ? sR / 12.92 : Math.pow((sR + 0.055) / 1.055, 2.4);
+  const gLin = sG <= 0.03928 ? sG / 12.92 : Math.pow((sG + 0.055) / 1.055, 2.4);
+  const bLin = sB <= 0.03928 ? sB / 12.92 : Math.pow((sB + 0.055) / 1.055, 2.4);
+
+  const lum = 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
+  return Math.max(0, Math.min(1, Number(lum.toFixed(4))));
+}
+
+/**
+ * حساب درجة سطوع الثيم بالكامل بناءً على خلفيته الرئيسية أو منطقة المحادثة
+ */
+export function getThemeLuminance(themeOrId: ThemeFullStyle | string): number {
+  if (typeof themeOrId === 'string') {
+    const style = THEME_STYLES[themeOrId];
+    if (style) {
+      return getThemeLuminance(style);
+    }
+    return calculateColorLuminance(themeOrId);
+  }
+  const colorStr = themeOrId.bgColorHex || themeOrId.chatBg || themeOrId.appBg || '#ffffff';
+  return calculateColorLuminance(colorStr);
+}
+
+/**
+ * دالة استخراج اللون عالي التباين (أبيض أو أسود) بناءً على سطوع الخلفية
+ * - خلفية فاتحة (Luminance > 0.45) => نص أسود (#000000 أو #0f172a)
+ * - خلفية داكنة (Luminance <= 0.45) => نص أبيض (#ffffff)
+ */
+export function getContrastTextColor(backgroundColor: string, threshold = 0.45): '#000000' | '#ffffff' {
+  const lum = calculateColorLuminance(backgroundColor);
+  return lum > threshold ? '#000000' : '#ffffff';
+}
+
+export function isColorDark(color?: string): boolean {
+  if (!color) return false;
+  return calculateColorLuminance(color) < 0.22;
+}
+
+export function isColorLight(color?: string): boolean {
+  if (!color) return false;
+  return calculateColorLuminance(color) > 0.65;
+}
+
+/**
+ * استخراج لون خلفية فقاعة الرسالة الفعلي بدقة
+ */
+export function getBubbleEffectiveBgColor(params: {
+  isMe: boolean;
+  isNight: boolean;
+  bubbleStyle?: string;
+  curTheme?: ThemeFullStyle;
+  isMentioned?: boolean;
+  isAlert?: boolean;
+}): string {
+  if (params.isAlert) return '#fef3c7'; // تنبيه عاجل
+  if (params.isMentioned) return '#ffe4e6'; // إشارة منشن
+  if (params.bubbleStyle === 'transparent') {
+    return params.isNight ? '#0a0f1d' : (params.curTheme?.bgColorHex || '#f8fafc');
+  }
+  if (params.bubbleStyle === 'neon') {
+    return params.isMe ? '#241a12' : '#161f33';
+  }
+  if (params.bubbleStyle === 'royal-gold') {
+    return params.isMe ? '#2a1a06' : '#1b1712';
+  }
+  if (params.isNight) {
+    return params.isMe ? '#241a12' : '#161f33';
+  }
+  // الوضع النهاري الافتراضي
+  return params.isMe ? '#fef3c7' : '#ffffff';
+}
+
+/**
+ * ضبط لون نص الرسائل تلقائياً (أبيض أو أسود) بناءً على سطوع فقاعة المحادثة
+ * مع ضمان التباين العالي وإمكانية احترام لون الخط المخصص طالما كان متبايناً ومقروءاً
+ */
+export function getAutoContrastMessageTextColor(params: {
+  textColor?: string;
+  isMe: boolean;
+  isNight: boolean;
+  bubbleStyle?: string;
+  curTheme?: ThemeFullStyle;
+  isMentioned?: boolean;
+  isAlert?: boolean;
+  forceHighContrast?: boolean;
+}): string {
+  const bubbleBg = getBubbleEffectiveBgColor(params);
+  const bubbleLum = calculateColorLuminance(bubbleBg);
+  const isLightSurface = bubbleLum > 0.45;
+
+  // إذا تم تفعيل وضع التباين العالي الإلزامي: إما أبيض ناصع أو أسود فاحم
+  if (params.forceHighContrast) {
+    return isLightSurface ? '#000000' : '#ffffff';
+  }
+
+  // إذا اختار المستخدم لون نص مخصص، نتحقق من تباينه مع خلفية الفقاعة عبر دالة السطوع
+  if (params.textColor) {
+    const textLum = calculateColorLuminance(params.textColor);
+    if (isLightSurface) {
+      // خلفية الفقاعة فاتحة: يجب أن يكون النص داكناً
+      if (textLum > 0.38) {
+        return '#000000'; // اللون فاتح جداً وغير مقروء على خلفية فاتحة => أسود فاحم
+      }
+      return params.textColor;
+    } else {
+      // خلفية الفقاعة داكنة: يجب أن يكون النص فاتحاً
+      if (textLum < 0.35) {
+        return '#ffffff'; // اللون داكن جداً وغير مقروء على خلفية داكنة => أبيض ناصع
+      }
+      return params.textColor;
+    }
+  }
+
+  // الوضع التلقائي بدون لون مخصص
+  return isLightSurface ? '#000000' : '#ffffff';
+}
+
+/**
+ * غلاف توافقي لضبط لون نص الرسائل باستخدام دالة السطوع والتباين العالي
+ */
+export function getSafeMessageTextColor(
+  textColor: string | undefined,
+  isNight: boolean,
+  isTransparentBubble: boolean = false,
+  extra?: {
+    isMe?: boolean;
+    bubbleStyle?: string;
+    curTheme?: ThemeFullStyle;
+    isMentioned?: boolean;
+    isAlert?: boolean;
+    forceHighContrast?: boolean;
+  }
+): string {
+  return getAutoContrastMessageTextColor({
+    textColor,
+    isMe: extra?.isMe ?? false,
+    isNight,
+    bubbleStyle: extra?.bubbleStyle || (isTransparentBubble ? 'transparent' : undefined),
+    curTheme: extra?.curTheme,
+    isMentioned: extra?.isMentioned,
+    isAlert: extra?.isAlert,
+    forceHighContrast: extra?.forceHighContrast
+  });
+}
+
+export function buildNightModeTheme(base: ThemeFullStyle): ThemeFullStyle {
+  return {
+    ...base,
+    appBg: 'bg-[#070b13]',
+    appText: 'text-slate-100 font-bold',
+    chatBg: 'bg-[#0a0f1d]',
+    headerBg: 'bg-[#111726]',
+    headerBorder: 'border-slate-800 shadow-md',
+    headerAccent: base.headerAccent?.includes('text-black') || base.headerAccent?.includes('text-slate-950')
+      ? 'text-amber-400 font-extrabold'
+      : base.headerAccent || 'text-amber-400 font-extrabold',
+    subHeaderBg: 'bg-[#0c1220]',
+    subHeaderBorder: 'border-slate-800',
+    subHeaderText: 'text-slate-200 font-bold',
+    bottomBarBg: 'bg-[#111726]',
+    bottomBarBorder: 'border-slate-800',
+    bottomBarText: 'text-slate-100 font-bold',
+    inputBarBg: 'bg-[#111726]',
+    inputBarBorder: 'border-slate-800 shadow-md',
+    primaryBtn: base.primaryBtn?.includes('bg-white')
+      ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-md'
+      : base.primaryBtn || 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-md',
+    drawerBg: 'bg-[#0a0f1d] text-slate-100',
+    drawerHeaderBg: 'bg-[#111726] text-slate-100 border-b border-slate-800',
+    cardBg: 'bg-[#111726]',
+    cardBorder: 'border-slate-800 shadow-md',
+    accentText: 'text-amber-400 font-black',
+    bubbleTheme: 'border-slate-800 text-slate-100 bg-[#151f33] shadow-md font-semibold',
+    accentColor: base.accentColor || '#f59e0b',
+    bgColorHex: '#0a0f1d',
+    fieldBg: 'bg-[#162035]',
+    fieldBorder: 'border-slate-700 shadow-inner',
+    fieldFocus: 'focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50',
+    fieldText: 'text-white font-bold',
+    fieldPlaceholder: 'placeholder-slate-400',
+    recommendedTextColor: '#ffffff',
+    recommendedNameColor: '#fbbf24'
+  };
+}
+

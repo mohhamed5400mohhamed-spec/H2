@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --app-height: 100dvh;
@@ -14,6 +15,21 @@
   --theme-bubble-bg: #ffffff;
   --theme-bubble-border: #e2e8f0;
   --theme-bubble-text: #0f172a;
+}
+
+html.dark,
+[data-theme-mode="night"] {
+  color-scheme: dark;
+  --theme-app-bg: #070b13;
+  --theme-header-bg: #111726;
+  --theme-header-border: #1e293b;
+  --theme-card-bg: #111726;
+  --theme-card-border: #1e293b;
+  --theme-input-bg: #162035;
+  --theme-input-border: #334155;
+  --theme-bubble-bg: #161f32;
+  --theme-bubble-border: #334155;
+  --theme-bubble-text: #f8fafc;
 }
 
 /* Custom Theme Runtime CSS Variable Classes */

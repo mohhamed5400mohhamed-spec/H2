@@ -231,6 +231,15 @@ import {
   AVAILABLE_REACTIONS,
   FONTS_LIST,
   buildThemeFullStyleFromCustom,
+  buildNightModeTheme,
+  isColorDark,
+  isColorLight,
+  calculateColorLuminance,
+  getContrastTextColor,
+  getThemeLuminance,
+  getBubbleEffectiveBgColor,
+  getAutoContrastMessageTextColor,
+  getSafeMessageTextColor,
   type CustomThemePreset,
   type ThemeId,
   type ThemeFullStyle
@@ -1179,6 +1188,32 @@ export default function App() {
       return false;
     }
   });
+  const [isNightMode, setIsNightMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('soqoor_night_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isHighContrastMode, setIsHighContrastMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('soqoor_high_contrast') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+
+  useEffect(() => {
+    if (isNightMode) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme-mode', 'night');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.removeAttribute('data-theme-mode');
+    }
+  }, [isNightMode]);
+
   // These are only first-paint fallbacks. The persisted admin values arrive from
   // the server's globalAppearance payload and replace them before the app is shown.
   const [activeTheme, setActiveTheme] = useState<string>(() => {
@@ -1281,13 +1316,12 @@ export default function App() {
     () => customThemes.find((ct) => ct.id === activeTheme) || null,
     [customThemes, activeTheme]
   );
-  const curTheme = useMemo(
-    () =>
-      activeCustomTheme
-        ? buildThemeFullStyleFromCustom(activeCustomTheme.colors)
-        : THEME_STYLES[activeTheme] || THEME_STYLES['golden-brown-harmony'],
-    [activeCustomTheme, activeTheme]
-  );
+  const curTheme = useMemo(() => {
+    const base = activeCustomTheme
+      ? buildThemeFullStyleFromCustom(activeCustomTheme.colors)
+      : THEME_STYLES[activeTheme] || THEME_STYLES['golden-brown-harmony'];
+    return isNightMode ? buildNightModeTheme(base) : base;
+  }, [activeCustomTheme, activeTheme, isNightMode]);
 
   useEffect(() => {
     if (!activeCustomTheme) return;
@@ -1858,6 +1892,35 @@ export default function App() {
       setToast((prev) => (prev?.message === message ? null : prev));
     }, 4000);
   };
+
+  const toggleNightMode = useCallback(() => {
+    setIsNightMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('soqoor_night_mode', String(next));
+      } catch {}
+      if (next) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme-mode', 'night');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.removeAttribute('data-theme-mode');
+      }
+      showToast(next ? 'تم تفعيل الوضع الليلي الهادئ 🌙' : 'تم تفعيل الوضع النهاري ☀️', 'info');
+      return next;
+    });
+  }, []);
+
+  const toggleHighContrastMode = useCallback(() => {
+    setIsHighContrastMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('soqoor_high_contrast', String(next));
+      } catch {}
+      showToast(next ? 'تم تفعيل وضع التباين العالي (ضبط نصوص أبيض/أسود بحساب السطوع) ⚡' : 'تم العودة إلى وضع التباين الطبيعي 👁️', 'info');
+      return next;
+    });
+  }, []);
 
   // Reusable Arabic relative time formatter for Room Messages, Wall, and Private Messages
   // (الآن، منذ دقيقة، منذ X دقائق، منذ ساعة، منذ 2 ساعات، منذ X ساعات، منذ يوم، إلخ)
@@ -6096,6 +6159,8 @@ export default function App() {
                     className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg w-fit max-w-[90%] text-[11px] sm:text-xs leading-snug shadow-2xs [overflow-wrap:anywhere] break-words ${
                       isMe
                         ? 'bg-[#241a12] text-amber-200 text-right rounded-tr-xs border border-amber-900/60'
+                        : isNightMode
+                        ? 'bg-[#182338] border border-slate-700/80 text-slate-100 text-right rounded-tl-xs'
                         : 'bg-white border border-slate-200 text-slate-900 text-right rounded-tl-xs'
                     }`}
                   >
@@ -6234,7 +6299,17 @@ export default function App() {
                       </div>
                     ) : (
                       pm.text && (
-                        <div className="whitespace-pre-wrap [overflow-wrap:anywhere] break-words text-xs" dir="auto">
+                        <div
+                          style={{
+                            color: getAutoContrastMessageTextColor({
+                              isMe,
+                              isNight: isNightMode,
+                              forceHighContrast: isHighContrastMode
+                            })
+                          }}
+                          className="whitespace-pre-wrap [overflow-wrap:anywhere] break-words text-xs font-medium"
+                          dir="auto"
+                        >
                           {renderFormattedMessageText(pm.text)}
                           {pm.isEdited && (
                             <span className="text-[9px] text-amber-400/90 font-normal mr-1 select-none">(معدلة ✏️)</span>
@@ -7691,6 +7766,20 @@ export default function App() {
             <BellRing className="w-3.5 h-3.5 text-amber-400" />
           </button>
 
+          {/* Quick Night Mode Toggle Button 🌙 / ☀️ */}
+          <button
+            type="button"
+            onClick={toggleNightMode}
+            className={`w-7 h-7 rounded-md flex items-center justify-center shadow transition-all cursor-pointer flex-shrink-0 ${
+              isNightMode
+                ? 'bg-indigo-950 hover:bg-indigo-900 text-yellow-300 border border-yellow-400/50 shadow-yellow-500/20'
+                : 'bg-[#2d241c] hover:bg-[#3d3228] text-amber-300 border border-amber-600/40'
+            }`}
+            title={isNightMode ? 'الوضع الليلي مفعّل 🌙 - انقر للتبديل للوضع النهاري ☀️' : 'الوضع النهاري ☀️ - انقر لتفعيل الوضع الليلي 🌙'}
+          >
+            <span className="text-xs">{isNightMode ? '🌙' : '☀️'}</span>
+          </button>
+
           {/* THE 5 MICROPHONE SLOTS (مع صورة العضو المتحدث وخيارات سحب/كتم/إفلات المايك) */}
           <div className="flex-1 grid grid-cols-5 gap-1 px-0.5">
             {micSlots.map((slot) => {
@@ -8115,6 +8204,50 @@ export default function App() {
                         <span>الرسائل المفضلة</span>
                       </span>
                       <span className="text-[10px] font-mono text-amber-300 font-black">({starredMessages.length})</span>
+                    </button>
+
+                    {/* زر تبديل الوضع الليلي والنهاري */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleNightMode();
+                        setShowCompactToolsMenu(false);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-lg border font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                        isNightMode
+                          ? 'bg-indigo-950/70 hover:bg-indigo-900/70 border-indigo-500/50 text-indigo-200'
+                          : 'bg-slate-800/60 hover:bg-slate-700/60 border-slate-700 text-slate-200'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-sm">{isNightMode ? '🌙' : '☀️'}</span>
+                        <span>الوضع الليلي (Night Mode)</span>
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isNightMode ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                        {isNightMode ? 'مفعّل 🌙' : 'موقف ☀️'}
+                      </span>
+                    </button>
+
+                    {/* زر وضع التباين العالي بحساب درجة السطوع */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleHighContrastMode();
+                        setShowCompactToolsMenu(false);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-lg border font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                        isHighContrastMode
+                          ? 'bg-amber-950/70 hover:bg-amber-900/70 border-amber-500/50 text-amber-200'
+                          : 'bg-slate-800/60 hover:bg-slate-700/60 border-slate-700 text-slate-200'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-sm">⚡</span>
+                        <span>وضع التباين العالي (Luminance)</span>
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isHighContrastMode ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-300'}`}>
+                        {isHighContrastMode ? 'مفعّل ⚡' : 'تلقائي 👁️'}
+                      </span>
                     </button>
                   </div>
 
@@ -9010,46 +9143,78 @@ export default function App() {
                   {/* Snug Message Bubble (تمتد بكامل العرض لمقابلة زر الثلاث نقاط بالأعلى) */}
                   <div className={`block w-full max-w-full text-right px-2 py-0.5 sm:px-2.5 sm:py-1 transition-all [overflow-wrap:anywhere] break-words shadow-2xs ${
                     isAlertMessage
-                      ? 'rounded-xl bg-amber-100/95 text-amber-950 border border-amber-300 shadow-2xs'
+                      ? isNightMode
+                        ? 'rounded-xl bg-amber-950/80 text-amber-200 border border-amber-600/70 shadow-xs'
+                        : 'rounded-xl bg-amber-100/95 text-amber-950 border border-amber-300 shadow-2xs'
                       : isMentioned
-                      ? 'rounded-xl bg-rose-50 text-rose-950 border border-rose-300 ring-1 ring-rose-200 shadow-2xs'
+                      ? isNightMode
+                        ? 'rounded-xl bg-rose-950/80 text-rose-200 border border-rose-500/60 ring-1 ring-rose-500/30 shadow-xs'
+                        : 'rounded-xl bg-rose-50 text-rose-950 border border-rose-300 ring-1 ring-rose-200 shadow-2xs'
                       : bubbleStyle === 'transparent'
                       ? 'bg-transparent border-0 border-transparent shadow-none px-1 py-0.5'
                       : bubbleStyle === 'pill'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-xl sm:rounded-2xl shadow-2xs px-3 py-1 sm:px-3.5 sm:py-1.5 bg-amber-50/95 text-slate-900 border border-amber-300/80'
-                        : 'rounded-xl sm:rounded-2xl shadow-2xs px-3 py-1 sm:px-3.5 sm:py-1.5 bg-white text-slate-900 border border-slate-200/90'
+                        ? isNightMode
+                          ? 'rounded-xl sm:rounded-2xl shadow-xs px-3 py-1 sm:px-3.5 sm:py-1.5 bg-[#241a12] text-amber-100 border border-amber-600/50'
+                          : 'rounded-xl sm:rounded-2xl shadow-2xs px-3 py-1 sm:px-3.5 sm:py-1.5 bg-amber-50/95 text-slate-900 border border-amber-300/80'
+                        : isNightMode
+                          ? 'rounded-xl sm:rounded-2xl shadow-xs px-3 py-1 sm:px-3.5 sm:py-1.5 bg-[#161f33] text-slate-100 border border-slate-700/80'
+                          : 'rounded-xl sm:rounded-2xl shadow-2xs px-3 py-1 sm:px-3.5 sm:py-1.5 bg-white text-slate-900 border border-slate-200/90'
                       : bubbleStyle === 'classic'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-xs border-2 border-amber-300 shadow-2xs font-medium bg-amber-50/90 text-slate-900'
-                        : 'rounded-xs border-2 border-slate-300 shadow-2xs font-medium bg-white text-slate-900'
+                        ? isNightMode
+                          ? 'rounded-xs border-2 border-amber-500/70 shadow-xs font-medium bg-[#241a12] text-amber-100'
+                          : 'rounded-xs border-2 border-amber-300 shadow-2xs font-medium bg-amber-50/90 text-slate-900'
+                        : isNightMode
+                          ? 'rounded-xs border-2 border-slate-700 shadow-xs font-medium bg-[#161f33] text-slate-100'
+                          : 'rounded-xs border-2 border-slate-300 shadow-2xs font-medium bg-white text-slate-900'
                       : bubbleStyle === 'glass'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-xl backdrop-blur-md bg-amber-100/80 border border-amber-300/70 text-slate-900 shadow-xs'
-                        : 'rounded-xl backdrop-blur-md bg-white/80 border border-white/60 text-slate-900 shadow-xs'
+                        ? isNightMode
+                          ? 'rounded-xl backdrop-blur-md bg-amber-950/50 border border-amber-500/50 text-amber-100 shadow-xs'
+                          : 'rounded-xl backdrop-blur-md bg-amber-100/80 border border-amber-300/70 text-slate-900 shadow-xs'
+                        : isNightMode
+                          ? 'rounded-xl backdrop-blur-md bg-slate-900/80 border border-slate-700/60 text-slate-100 shadow-xs'
+                          : 'rounded-xl backdrop-blur-md bg-white/80 border border-white/60 text-slate-900 shadow-xs'
                       : bubbleStyle === 'sharp'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-tl-xl rounded-br-xl rounded-tr-xs rounded-bl-xs border-r-3 border-amber-400 bg-amber-50/90 text-slate-900 shadow-2xs'
-                        : 'rounded-tl-xl rounded-br-xl rounded-tr-xs rounded-bl-xs border-r-3 border-slate-400 bg-white text-slate-900 shadow-2xs'
+                        ? isNightMode
+                          ? 'rounded-tl-xl rounded-br-xl rounded-tr-xs rounded-bl-xs border-r-3 border-amber-500 bg-[#241a12] text-amber-100 shadow-xs'
+                          : 'rounded-tl-xl rounded-br-xl rounded-tr-xs rounded-bl-xs border-r-3 border-amber-400 bg-amber-50/90 text-slate-900 shadow-2xs'
+                        : isNightMode
+                          ? 'rounded-tl-xl rounded-br-xl rounded-tr-xs rounded-bl-xs border-r-3 border-slate-600 bg-[#161f33] text-slate-100 shadow-xs'
+                          : 'rounded-tl-xl rounded-br-xl rounded-tr-xs rounded-bl-xs border-r-3 border-slate-400 bg-white text-slate-900 shadow-2xs'
                       : bubbleStyle === 'speech'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-xl rounded-tr-xs shadow-2xs bg-amber-50/90 text-slate-900 border border-amber-200/90'
-                        : 'rounded-xl rounded-tl-xs shadow-2xs bg-white text-slate-900 border border-slate-200/90'
+                        ? isNightMode
+                          ? 'rounded-xl rounded-tr-xs shadow-xs bg-[#241a12] text-amber-100 border border-amber-600/50'
+                          : 'rounded-xl rounded-tr-xs shadow-2xs bg-amber-50/90 text-slate-900 border border-amber-200/90'
+                        : isNightMode
+                          ? 'rounded-xl rounded-tl-xs shadow-xs bg-[#161f33] text-slate-100 border border-slate-700/80'
+                          : 'rounded-xl rounded-tl-xs shadow-2xs bg-white text-slate-900 border border-slate-200/90'
                       : bubbleStyle === 'neon'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-xl shadow-xs shadow-amber-500/25 border-2 border-amber-500/80 bg-amber-50/90 text-slate-900'
-                        : 'rounded-xl shadow-xs shadow-indigo-500/20 border-2 border-indigo-400/70 bg-white text-slate-900'
+                        ? 'rounded-xl shadow-xs shadow-amber-500/25 border-2 border-amber-500/80 bg-[#241a12] text-amber-100'
+                        : 'rounded-xl shadow-xs shadow-indigo-500/20 border-2 border-indigo-400/70 bg-[#161f33] text-slate-100'
                       : bubbleStyle === 'compact'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-md shadow-2xs py-0.5 px-1.5 text-xs border border-amber-200 bg-amber-50/90 text-slate-900'
-                        : 'rounded-md shadow-2xs py-0.5 px-1.5 text-xs border border-slate-200 bg-white text-slate-900'
+                        ? isNightMode
+                          ? 'rounded-md shadow-xs py-0.5 px-1.5 text-xs border border-amber-600/50 bg-[#241a12] text-amber-100'
+                          : 'rounded-md shadow-2xs py-0.5 px-1.5 text-xs border border-amber-200 bg-amber-50/90 text-slate-900'
+                        : isNightMode
+                          ? 'rounded-md shadow-xs py-0.5 px-1.5 text-xs border border-slate-700 bg-[#161f33] text-slate-100'
+                          : 'rounded-md shadow-2xs py-0.5 px-1.5 text-xs border border-slate-200 bg-white text-slate-900'
                       : bubbleStyle === 'royal-gold'
                       ? currentUser && msg.username === currentUser.username
-                        ? 'rounded-xl shadow-xs border-2 border-amber-400 bg-gradient-to-r from-amber-100/95 to-yellow-100/90 text-amber-950 font-medium'
-                        : 'rounded-xl shadow-xs border-2 border-amber-300 bg-gradient-to-r from-amber-50/95 to-yellow-50/90 text-amber-950 font-medium'
+                        ? 'rounded-xl shadow-xs border-2 border-amber-400 bg-gradient-to-r from-amber-950/80 to-yellow-950/70 text-amber-100 font-medium'
+                        : 'rounded-xl shadow-xs border-2 border-amber-500/60 bg-gradient-to-r from-slate-900/90 to-amber-950/60 text-amber-100 font-medium'
                       : currentUser && msg.username === currentUser.username
-                      ? 'rounded-xl rounded-tr-xs shadow-2xs bg-amber-50/85 text-slate-900 border border-amber-200/90'
-                      : 'rounded-xl rounded-tl-xs shadow-2xs bg-white text-slate-900 border border-slate-200/90'
+                      ? isNightMode
+                        ? 'rounded-xl rounded-tr-xs shadow-xs bg-[#241a12] text-amber-100 border border-amber-600/50'
+                        : 'rounded-xl rounded-tr-xs shadow-2xs bg-amber-50/85 text-slate-900 border border-amber-200/90'
+                      : isNightMode
+                        ? 'rounded-xl rounded-tl-xs shadow-xs bg-[#161f33] text-slate-100 border border-slate-700/80'
+                        : 'rounded-xl rounded-tl-xs shadow-2xs bg-white text-slate-900 border border-slate-200/90'
                   }`}>
                     {/* Quoted Reply Banner if msg.replyTo (ميزة الرد بكل مكان) */}
                     {msg.replyTo && (
@@ -9139,16 +9304,21 @@ export default function App() {
                       msg.text && (
                         <div
                           style={{
-                            color: msg.textColor
-                              ? msg.textColor
-                              : bubbleStyle === 'transparent'
-                              ? (activeWallpaper.startsWith('light-') || curTheme.chatBg?.includes('bg-white') || curTheme.chatBg?.includes('bg-slate-50') ? '#0f172a' : '#f8fafc')
-                              : '#000000'
+                            color: getAutoContrastMessageTextColor({
+                              textColor: msg.textColor,
+                              isMe: Boolean(currentUser && msg.username === currentUser.username),
+                              isNight: isNightMode,
+                              bubbleStyle,
+                              curTheme,
+                              isMentioned,
+                              isAlert: isAlertMessage,
+                              forceHighContrast: isHighContrastMode
+                            })
                           }}
                           dir="auto"
                           className={`${
                             chatFontSize === 'sm' ? 'text-xs' : chatFontSize === 'lg' ? 'text-base' : chatFontSize === 'xl' ? 'text-lg' : 'text-sm'
-                          } leading-snug font-normal break-words [overflow-wrap:anywhere] whitespace-pre-wrap ${!msg.textColor && bubbleStyle !== 'transparent' ? 'text-black' : ''}`}
+                          } leading-snug font-normal break-words [overflow-wrap:anywhere] whitespace-pre-wrap`}
                         >
                           {renderFormattedMessageText(msg.text)}
                           {msg.isEdited && (
@@ -13925,6 +14095,10 @@ export default function App() {
                     localStorage.setItem('soqoor_eye_comfort', String(next));
                   } catch {}
                 }}
+                isNightMode={isNightMode}
+                onToggleNightMode={toggleNightMode}
+                isHighContrastMode={isHighContrastMode}
+                onToggleHighContrastMode={toggleHighContrastMode}
                 soundVolume={soundVolume}
                 onChangeSoundVolume={(v) => {
                   setSoundVolume(v);

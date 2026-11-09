@@ -38,6 +38,10 @@ export interface ThemeAndWallpaperCenterProps {
   onChangeTextColor?: (color: string) => void;
   eyeComfort: boolean;
   onToggleEyeComfort: () => void;
+  isNightMode?: boolean;
+  onToggleNightMode?: () => void;
+  isHighContrastMode?: boolean;
+  onToggleHighContrastMode?: () => void;
   soundVolume: number;
   onChangeSoundVolume: (volume: number) => void;
   particlesEnabled: boolean;
@@ -592,6 +596,10 @@ export const ThemeAndWallpaperCenter: React.FC<ThemeAndWallpaperCenterProps> = (
   onChangeTextColor,
   eyeComfort,
   onToggleEyeComfort,
+  isNightMode = false,
+  onToggleNightMode,
+  isHighContrastMode = false,
+  onToggleHighContrastMode,
   soundVolume,
   onChangeSoundVolume,
   particlesEnabled,
@@ -1162,7 +1170,51 @@ export const ThemeAndWallpaperCenter: React.FC<ThemeAndWallpaperCenterProps> = (
           </div>
 
           {/* 6. Comfort, Sound & Performance Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+            {/* High Contrast Mode Toggle */}
+            <button
+              type="button"
+              onClick={onToggleHighContrastMode}
+              className={`p-3 rounded-xl border flex items-center justify-between text-right transition-all cursor-pointer ${
+                isHighContrastMode
+                  ? 'bg-amber-950/70 border-amber-500/70 text-amber-200 shadow-md ring-1 ring-amber-500/40'
+                  : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <div>
+                <div className="text-xs font-bold flex items-center gap-1.5 text-amber-300">
+                  <span className="text-sm">⚡</span>
+                  وضع التباين العالي (High Contrast)
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">ضبط النص تلقائياً (أبيض/أسود) بحساب السطوع</div>
+              </div>
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isHighContrastMode ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-700'}`}>
+                {isHighContrastMode && <Check className="w-3 h-3 text-slate-950" />}
+              </div>
+            </button>
+
+            {/* Night Mode Toggle */}
+            <button
+              type="button"
+              onClick={onToggleNightMode}
+              className={`p-3 rounded-xl border flex items-center justify-between text-right transition-all cursor-pointer ${
+                isNightMode
+                  ? 'bg-indigo-950/70 border-indigo-500/70 text-indigo-200 shadow-md ring-1 ring-indigo-500/40'
+                  : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-500'
+              }`}
+            >
+              <div>
+                <div className="text-xs font-bold flex items-center gap-1.5 text-indigo-300">
+                  <span className="text-sm">🌙</span>
+                  الوضع الليلي (Night Mode)
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">انعكاس متناسق كامل للألوان والخطوط</div>
+              </div>
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isNightMode ? 'bg-indigo-500 text-white' : 'bg-slate-700'}`}>
+                {isNightMode && <Check className="w-3 h-3" />}
+              </div>
+            </button>
+
             {/* Eye Comfort */}
             <button
               onClick={onToggleEyeComfort}
