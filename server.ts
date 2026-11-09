@@ -2026,7 +2026,7 @@ export interface GlobalAppearance {
 }
 
 export let globalAppearance: GlobalAppearance = {
-  theme: 'dark-gold',
+  theme: 'pearl-gray-calm',
   fontFamily: 'Cairo',
   fontWeight: 'default',
   wallpaper: 'default',
@@ -4406,7 +4406,7 @@ io.on('connection', (socket) => {
     if (!Array.isArray(globalAppearance.customThemes)) {
       globalAppearance.customThemes = [];
     }
-    const themeId = preset.id && preset.id.startsWith('custom-theme-') ? preset.id : `custom-theme-${Date.now()}`;
+    const themeId = preset.id && preset.id.trim() ? sanitizeText(preset.id).trim() : `custom-theme-${Date.now()}`;
     const newPreset = {
       id: themeId,
       name: cleanName,
@@ -4447,7 +4447,7 @@ io.on('connection', (socket) => {
     if (!Array.isArray(globalAppearance.customThemes)) return;
     globalAppearance.customThemes = globalAppearance.customThemes.filter((t) => t.id !== themeId);
     if (globalAppearance.theme === themeId) {
-      globalAppearance.theme = 'dark-gold';
+      globalAppearance.theme = 'pearl-gray-calm';
     }
     try {
       await saveGlobalAppearance();

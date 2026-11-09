@@ -46,7 +46,10 @@ import { THEMES_LIST, FONTS_LIST, WALLPAPERS_LIST, BUBBLE_STYLES } from './Theme
 import {
   CustomThemeColors,
   CustomThemePreset,
-  DEFAULT_CUSTOM_THEME_COLORS
+  DEFAULT_CUSTOM_THEME_COLORS,
+  getBuiltInThemeColors,
+  BUILT_IN_THEMES_FOR_EDITING,
+  THEME_STYLES
 } from '../constants/themeStyles';
 import { getCountryNameFromFlag } from '../utils/countryDetect';
 import {
@@ -274,6 +277,8 @@ interface AdminControlSuiteProps {
   onAssignMemberBanner?: (username: string, bannerUrl?: string) => void;
   onGrantMemberGift?: (username: string, giftUrl: string, giftTitle?: string) => void;
   onRemoveMemberGift?: (username: string, giftUrl: string) => void;
+  initialTab?: 'moderation' | 'roomControls' | 'security' | 'bans' | 'broadcast' | 'stats' | 'memos' | 'words' | 'shortcuts' | 'logs' | 'matrix' | 'welcome' | 'emblems' | 'colors';
+  initialThemeToEdit?: string;
   socket?: any;
   onClose: () => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -371,13 +376,15 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
   onAddShortcut,
   onDeleteShortcut,
   onUpdateShortcut,
+  initialTab,
+  initialThemeToEdit,
   onClose,
   showToast
 }) => {
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<
     'moderation' | 'roomControls' | 'security' | 'bans' | 'broadcast' | 'stats' | 'memos' | 'words' | 'shortcuts' | 'logs' | 'matrix' | 'welcome' | 'emblems' | 'colors'
-  >('moderation');
+  >(initialTab || 'moderation');
 
   // Configurable Timeouts & Grace Periods State
   const [timeoutForm, setTimeoutForm] = useState({
@@ -408,6 +415,32 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
   const [customThemeName, setCustomThemeName] = useState<string>('');
   const [editingCustomThemeId, setEditingCustomThemeId] = useState<string | undefined>(undefined);
   const [customColorsForm, setCustomColorsForm] = useState<CustomThemeColors>({ ...DEFAULT_CUSTOM_THEME_COLORS });
+  const [selectedBuiltInThemeToEdit, setSelectedBuiltInThemeToEdit] = useState<string>('pearl-gray-calm');
+  const [themeEditMode, setThemeEditMode] = useState<'create' | 'editBuiltIn' | 'editCustom'>('create');
+
+  const handleLoadBuiltInThemeForEditing = (themeId: string) => {
+    const meta = BUILT_IN_THEMES_FOR_EDITING.find((t) => t.id === themeId);
+    const colors = getBuiltInThemeColors(themeId);
+    setCustomColorsForm(colors);
+    setEditingCustomThemeId(themeId);
+    setCustomThemeName(meta ? `${meta.name} (نسخة معدلة)` : `ثيم ${themeId} معدل`);
+    setThemeEditMode('editBuiltIn');
+    setSelectedBuiltInThemeToEdit(themeId);
+    showToast(`تم استدعاء ألوان ثيم [${meta?.name || themeId}] في لوحة التعديل بنجاح! 🎨`, 'success');
+  };
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (initialThemeToEdit) {
+      setActiveTab('colors');
+      handleLoadBuiltInThemeForEditing(initialThemeToEdit);
+    }
+  }, [initialThemeToEdit]);
 
   // General Welcome Settings State
   const [generalWelcomeEnabled, setGeneralWelcomeEnabled] = useState<boolean>(generalWelcome?.enabled ?? true);
@@ -425,8 +458,8 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
   }, [generalWelcome]);
 
   // Appearance Global broadcast state
-  const [globalThemeChoice, setGlobalThemeChoice] = useState('golden-brown-harmony');
-  const [globalFontChoice, setGlobalFontChoice] = useState('Noto Naskh Arabic');
+  const [globalThemeChoice, setGlobalThemeChoice] = useState('pearl-gray-calm');
+  const [globalFontChoice, setGlobalFontChoice] = useState('Cairo');
   const [globalWallpaperChoice, setGlobalWallpaperChoice] = useState('default');
   const [globalBubbleChoice, setGlobalBubbleChoice] = useState('modern');
 
@@ -6554,6 +6587,101 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
             </p>
           </div>
 
+          {/* قسم استدعاء وتعديل ألوان الثيمات السابقة والمثبتة */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-950/70 via-slate-800/90 to-slate-900 border border-indigo-500/50 shadow-xl space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-amber-400" />
+                <h4 className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
+                  <span>تعديل وتحرير ألوان الثيمات السابقة</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                    متاح بالكامل ✨
+                  </span>
+                </h4>
+              </div>
+              {themeEditMode === 'editBuiltIn' && editingCustomThemeId && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold truncate max-w-[150px]">
+                    قيد التعديل: {BUILT_IN_THEMES_FOR_EDITING.find((b) => b.id === editingCustomThemeId)?.name || editingCustomThemeId} ✏️
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomColorsForm(getBuiltInThemeColors(editingCustomThemeId));
+                      showToast('تمت إعادة تحميل ألوان الثيم الأصلية ↺', 'info');
+                    }}
+                    className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[10px] font-bold text-slate-200 cursor-pointer"
+                    title="إعادة ضبط ألوان هذا الثيم للأصل"
+                  >
+                    الأصل ↺
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              اختر أي ثيم من الثيمات السابقة في الشات لتفكيك ألوانه بالكامل واستدعائها إلى لوحة التحكم، مما يتيح لك تعديل ألوان الخطوط، الهيدر، الفوتر، حقول الكتابة، وخلفيات الفقاعات بحرية تامة:
+            </p>
+
+            {/* Built-in Theme Selector & Quick Load Button */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-0.5">
+              <select
+                value={selectedBuiltInThemeToEdit}
+                onChange={(e) => setSelectedBuiltInThemeToEdit(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-indigo-500/50 text-xs text-white font-bold outline-none focus:border-amber-400 cursor-pointer shadow-inner"
+              >
+                {BUILT_IN_THEMES_FOR_EDITING.map((bt) => (
+                  <option key={bt.id} value={bt.id} className="bg-slate-900 text-white py-1">
+                    {bt.name} ({bt.category === 'calm' ? 'هادئ مريح' : bt.category === 'gold' ? 'ذهبي ملكي' : bt.category === 'nature' ? 'طبيعي' : 'رسمي'})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => handleLoadBuiltInThemeForEditing(selectedBuiltInThemeToEdit)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs cursor-pointer shadow-md flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95"
+              >
+                <Palette className="w-3.5 h-3.5 text-slate-950" />
+                <span>تحميل ألوان هذا الثيم للتعديل 🎨</span>
+              </button>
+            </div>
+
+            {/* Quick Chips for Top Built-in Themes */}
+            <div className="pt-1">
+              <div className="text-[10px] text-slate-400 font-bold mb-1.5 flex items-center gap-1">
+                <span>ثيمات سريعة بنقرة واحدة لتحميلها وتعديلها:</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {BUILT_IN_THEMES_FOR_EDITING.slice(0, 9).map((th) => {
+                  const isCurrent = editingCustomThemeId === th.id;
+                  return (
+                    <button
+                      key={th.id}
+                      type="button"
+                      onClick={() => handleLoadBuiltInThemeForEditing(th.id)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm ring-1 ring-amber-400'
+                          : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      }`}
+                    >
+                      <span className="flex items-center gap-0.5">
+                        {th.previewColors.slice(0, 3).map((col, ci) => (
+                          <span
+                            key={ci}
+                            className="w-2 h-2 rounded-full inline-block border border-white/20"
+                            style={{ backgroundColor: col }}
+                          />
+                        ))}
+                      </span>
+                      <span>{th.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* Live Mini-Preview */}
           <div
             className="rounded-2xl overflow-hidden border shadow-xl transition-all"
@@ -6752,18 +6880,58 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
           ))}
 
           {/* Save Template Box */}
-          <div className="p-3 rounded-2xl bg-slate-800/90 border border-emerald-500/40 space-y-2.5">
-            <h4 className="font-black text-xs text-emerald-300">
-              {editingCustomThemeId ? 'تحديث القالب المخصص ✏️' : 'حفظ القالب وإضافته إلى الاستايل والثيمات 💾'}
-            </h4>
+          <div className="p-3.5 rounded-2xl bg-slate-800/90 border border-emerald-500/40 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="font-black text-xs text-emerald-300 flex items-center gap-1.5">
+                <span>
+                  {themeEditMode === 'editBuiltIn' && editingCustomThemeId
+                    ? `تحديث ألوان الثيم [${customThemeName}] ✏️`
+                    : editingCustomThemeId
+                    ? 'تحديث القالب المخصص ✏️'
+                    : 'حفظ القالب وإضافته إلى قائمة الثيمات 💾'}
+                </span>
+              </h4>
+              {themeEditMode === 'editBuiltIn' && editingCustomThemeId && (
+                <span className="text-[10px] text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/30">
+                  تعديل على ثيم سابق ({editingCustomThemeId})
+                </span>
+              )}
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={customThemeName}
                 onChange={(e) => setCustomThemeName(e.target.value)}
-                placeholder="اكتب اسم القالب (مثلاً: ثيم الصقور الملكي)..."
-                className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white outline-none focus:border-amber-400"
+                placeholder="اكتب اسم القالب أو اسم الثيم المعدل..."
+                className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white outline-none focus:border-amber-400 font-bold"
               />
+
+              {/* زر 1: حفظ كتحديث مباشر للثيم الأصلي */}
+              {themeEditMode === 'editBuiltIn' && editingCustomThemeId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!customThemeName.trim()) {
+                      showToast('يرجى كتابة اسم للقالب قبل الحفظ', 'error');
+                      return;
+                    }
+                    onSaveCustomTheme?.({
+                      id: editingCustomThemeId,
+                      name: customThemeName.trim(),
+                      colors: customColorsForm,
+                      applyNow: false
+                    });
+                    showToast(`تم حفظ وتحديث ألوان ثيم [${customThemeName}] بنجاح! 🎨`, 'success');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs cursor-pointer shadow-sm transition-all shrink-0"
+                  title="حفظ الألوان الجديدة لنفس هذا الثيم السابق بحيث يعمل بالألوان الجديدة"
+                >
+                  حفظ كتحديث للثيم الأصلي نفسه 💾
+                </button>
+              )}
+
+              {/* زر 2: حفظ كقالب جديد منفصل */}
               <button
                 type="button"
                 onClick={() => {
@@ -6772,18 +6940,21 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                     return;
                   }
                   onSaveCustomTheme?.({
-                    id: editingCustomThemeId,
-                    name: customThemeName.trim(),
+                    id: themeEditMode === 'editBuiltIn' ? `custom-theme-${Date.now()}` : editingCustomThemeId,
+                    name: themeEditMode === 'editBuiltIn' && !customThemeName.includes('معدل') ? `${customThemeName.trim()} (نسخة معدلة)` : customThemeName.trim(),
                     colors: customColorsForm,
                     applyNow: false
                   });
                   setEditingCustomThemeId(undefined);
+                  setThemeEditMode('create');
                   setCustomThemeName('');
                 }}
-                className="px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs cursor-pointer shadow-sm transition-all shrink-0"
               >
-                حفظ في القائمة فقط
+                {themeEditMode === 'editBuiltIn' ? 'حفظ كقالب جديد منفصل 📋' : 'حفظ في القائمة فقط'}
               </button>
+
+              {/* زر 3: حفظ وتعميم على الشات فوراً */}
               <button
                 type="button"
                 onClick={() => {
@@ -6792,15 +6963,16 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                     return;
                   }
                   onSaveCustomTheme?.({
-                    id: editingCustomThemeId,
+                    id: editingCustomThemeId || `custom-theme-${Date.now()}`,
                     name: customThemeName.trim(),
                     colors: customColorsForm,
                     applyNow: true
                   });
                   setEditingCustomThemeId(undefined);
+                  setThemeEditMode('create');
                   setCustomThemeName('');
                 }}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs cursor-pointer shadow-md"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all shrink-0"
               >
                 حفظ وتعميم على الشات فوراً 🚀
               </button>
@@ -6808,62 +6980,79 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
           </div>
 
           {/* Saved Custom Themes List */}
-          <div className="p-3 rounded-2xl bg-slate-800/70 border border-slate-700 space-y-2">
+          <div className="p-3.5 rounded-2xl bg-slate-800/70 border border-slate-700 space-y-2.5">
             <h4 className="font-black text-xs text-amber-300">
-              القوالب المخصصة المحفوظة ({customThemes?.length || 0}) ✨
+              القوالب المخصصة والثيمات المعدلة المحفوظة ({customThemes?.length || 0}) ✨
             </h4>
             {(!customThemes || customThemes.length === 0) ? (
               <div className="text-[11px] text-slate-400 py-3 text-center">
-                لا توجد قوالب مخصصة محفوظة بعد. قم بتنسيق الألوان أعلاه واضغط حفظ لإضافتها هنا وفي مركز الثيمات.
+                لا توجد قوالب مخصصة محفوظة بعد. قم بتعديل أي ثيم سابق أو إنشاء ألوان جديدة أعلاه واضغط حفظ.
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {customThemes.map((ct) => (
-                  <div
-                    key={ct.id}
-                    className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="font-black text-xs text-white truncate">{ct.name} 🎨</div>
-                      <div className="flex items-center gap-1 mt-1">
-                        {[ct.colors.headerBg, ct.colors.chatBg, ct.colors.bubbleBg, ct.colors.primaryBtnBg].map((cHex, i) => (
-                          <span
-                            key={i}
-                            className="w-3.5 h-3.5 rounded-full border border-white/20"
-                            style={{ backgroundColor: cHex }}
-                          />
-                        ))}
+                {customThemes.map((ct) => {
+                  const isBuiltInOverride = Boolean(THEME_STYLES[ct.id]);
+                  return (
+                    <div
+                      key={ct.id}
+                      className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-black text-xs text-white truncate">{ct.name} 🎨</span>
+                          {isBuiltInOverride && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
+                              ثيم سابق معدل 💎
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          {[ct.colors.headerBg, ct.colors.chatBg, ct.colors.bubbleBg, ct.colors.primaryBtnBg].map((cHex, i) => (
+                            <span
+                              key={i}
+                              className="w-3.5 h-3.5 rounded-full border border-white/20"
+                              style={{ backgroundColor: cHex }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onApplyGlobalAppearance?.(ct.id, 'Cairo', 'default', 'modern')}
+                          className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] cursor-pointer"
+                        >
+                          تطبيق
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCustomThemeId(ct.id);
+                            setCustomThemeName(ct.name);
+                            setCustomColorsForm({ ...DEFAULT_CUSTOM_THEME_COLORS, ...ct.colors });
+                            setThemeEditMode(isBuiltInOverride ? 'editBuiltIn' : 'editCustom');
+                          }}
+                          className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] cursor-pointer"
+                        >
+                          تعديل
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteCustomTheme?.(ct.id);
+                            if (isBuiltInOverride) {
+                              showToast(`تمت استعادة الألوان الأصلية لثيم [${ct.name}] ↺`, 'info');
+                            }
+                          }}
+                          className="px-2 py-1 rounded-lg bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-[10px] cursor-pointer"
+                          title={isBuiltInOverride ? 'استعادة الألوان الأصلية الافتراضية لهذا الثيم' : 'حذف القالب المخصص'}
+                        >
+                          {isBuiltInOverride ? 'استعادة الأصل ↺' : 'حذف'}
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => onApplyGlobalAppearance?.(ct.id, 'Cairo', 'default', 'modern')}
-                        className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] cursor-pointer"
-                      >
-                        تطبيق
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingCustomThemeId(ct.id);
-                          setCustomThemeName(ct.name);
-                          setCustomColorsForm({ ...DEFAULT_CUSTOM_THEME_COLORS, ...ct.colors });
-                        }}
-                        className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] cursor-pointer"
-                      >
-                        تعديل
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteCustomTheme?.(ct.id)}
-                        className="px-2 py-1 rounded-lg bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-[10px] cursor-pointer"
-                      >
-                        حذف
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

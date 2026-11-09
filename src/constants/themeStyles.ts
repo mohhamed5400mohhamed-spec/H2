@@ -1059,6 +1059,320 @@ export function buildThemeFullStyleFromCustom(c: CustomThemeColors): ThemeFullSt
   };
 }
 
+export function parseHexFromStyle(str?: string, fallback: string = '#ffffff'): string {
+  if (!str) return fallback;
+  const hexMatch = str.match(/#([0-9a-fA-F]{3,8})/);
+  if (hexMatch) {
+    let h = hexMatch[1];
+    if (h.length === 3 || h.length === 4) {
+      h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    }
+    if (h.length >= 6) {
+      return `#${h.slice(0, 6).toLowerCase()}`;
+    }
+  }
+
+  const s = str.toLowerCase();
+  if (s.includes('white')) return '#ffffff';
+  if (s.includes('black')) return '#000000';
+  if (s.includes('slate-950')) return '#020617';
+  if (s.includes('slate-900')) return '#0f172a';
+  if (s.includes('slate-800')) return '#1e293b';
+  if (s.includes('slate-700')) return '#334155';
+  if (s.includes('slate-600')) return '#475569';
+  if (s.includes('slate-500')) return '#64748b';
+  if (s.includes('slate-400')) return '#94a3b8';
+  if (s.includes('slate-300')) return '#cbd5e1';
+  if (s.includes('slate-200')) return '#e2e8f0';
+  if (s.includes('slate-100')) return '#f1f5f9';
+  if (s.includes('slate-50')) return '#f8fafc';
+  if (s.includes('amber-500')) return '#f59e0b';
+  if (s.includes('amber-400')) return '#fbbf24';
+  if (s.includes('amber-300')) return '#fcd34d';
+  if (s.includes('amber-200')) return '#fde68a';
+  if (s.includes('amber-100')) return '#fef3c7';
+  if (s.includes('amber-50')) return '#fffbeb';
+  if (s.includes('yellow-500')) return '#eab308';
+  if (s.includes('yellow-400')) return '#facc15';
+  if (s.includes('yellow-300')) return '#fde047';
+  if (s.includes('emerald-600')) return '#059669';
+  if (s.includes('emerald-500')) return '#10b981';
+  if (s.includes('emerald-400')) return '#34d399';
+  if (s.includes('indigo-600')) return '#4f46e5';
+  if (s.includes('indigo-500')) return '#6366f1';
+  if (s.includes('indigo-400')) return '#818cf8';
+  if (s.includes('rose-600')) return '#e11d48';
+  if (s.includes('rose-500')) return '#f43f5e';
+  if (s.includes('rose-400')) return '#fb7185';
+  if (s.includes('purple-600')) return '#9333ea';
+  if (s.includes('purple-500')) return '#a855f7';
+  if (s.includes('sky-600')) return '#0284c7';
+  if (s.includes('sky-500')) return '#0ea5e9';
+
+  return fallback;
+}
+
+export function getBuiltInThemeColors(themeId: string): CustomThemeColors {
+  const t = THEME_STYLES[themeId];
+  if (!t) return { ...DEFAULT_CUSTOM_THEME_COLORS };
+
+  const appBg = parseHexFromStyle(t.appBg, t.bgColorHex || '#0f172a');
+  const chatBg = parseHexFromStyle(t.chatBg, t.bgColorHex || '#f8fafc');
+  const headerBg = parseHexFromStyle(t.headerBg, '#1e1b18');
+  const headerBorder = parseHexFromStyle(t.headerBorder, t.accentColor || '#d97706');
+  const headerText = parseHexFromStyle(t.headerAccent, t.accentColor || '#fbbf24');
+  const subHeaderBg = parseHexFromStyle(t.subHeaderBg, '#292524');
+  const subHeaderText = parseHexFromStyle(t.subHeaderText, '#fde68a');
+  const bottomBarBg = parseHexFromStyle(t.bottomBarBg, headerBg);
+  const bottomBarText = parseHexFromStyle(t.bottomBarText, subHeaderText);
+  const inputBarBg = parseHexFromStyle(t.inputBarBg || t.bottomBarBg, headerBg);
+  const fieldBg = parseHexFromStyle(t.fieldBg, '#ffffff');
+  const fieldText = parseHexFromStyle(t.fieldText, '#000000');
+  const fieldBorder = parseHexFromStyle(t.fieldBorder, '#cbd5e1');
+  const bubbleBg = parseHexFromStyle(t.bubbleTheme, '#ffffff');
+  const bubbleBorder = parseHexFromStyle(t.bubbleTheme, fieldBorder);
+  const appText = parseHexFromStyle(t.appText, t.recommendedTextColor || '#f8fafc');
+  const accentText = parseHexFromStyle(t.accentText, t.accentColor || '#f59e0b');
+  const primaryBtnBg = parseHexFromStyle(t.primaryBtn, t.accentColor || '#d97706');
+  const primaryBtnText = t.primaryBtn?.includes('text-white') ? '#ffffff' : (t.primaryBtn?.includes('text-slate-950') || t.primaryBtn?.includes('text-black')) ? '#000000' : '#ffffff';
+  const drawerBg = parseHexFromStyle(t.drawerBg, appBg);
+  const cardBg = parseHexFromStyle(t.cardBg, '#1c1917');
+  const cardBorder = parseHexFromStyle(t.cardBorder, '#44403c');
+
+  return {
+    appBg,
+    chatBg,
+    headerBg,
+    headerText,
+    headerBorder,
+    subHeaderBg,
+    subHeaderText,
+    bottomBarBg,
+    bottomBarText,
+    inputBarBg,
+    fieldBg,
+    fieldText,
+    fieldBorder,
+    bubbleBg,
+    bubbleBorder,
+    appText,
+    accentText,
+    primaryBtnBg,
+    primaryBtnText,
+    drawerBg,
+    cardBg,
+    cardBorder
+  };
+}
+
+export interface BuiltInThemeMeta {
+  id: string;
+  name: string;
+  category: 'calm' | 'royal' | 'gold' | 'classic' | 'nature';
+  previewColors: string[];
+}
+
+export const BUILT_IN_THEMES_FOR_EDITING: BuiltInThemeMeta[] = [
+  {
+    id: 'pearl-gray-calm',
+    name: 'الرصاصي اللؤلؤي الهادئ 🪞',
+    category: 'calm',
+    previewColors: ['#f8fafc', '#e2e8f0', '#94a3b8', '#475569']
+  },
+  {
+    id: 'official-pure-light',
+    name: 'الأبيض الرسمي الفاخر 📄',
+    category: 'royal',
+    previewColors: ['#ffffff', '#f8fafc', '#0f172a', '#334155']
+  },
+  {
+    id: 'official-royal-white',
+    name: 'الديواني الملكي الأبيض 🏢',
+    category: 'royal',
+    previewColors: ['#ffffff', '#f1f5f9', '#020617', '#d97706']
+  },
+  {
+    id: 'royal-pure-gold-24k',
+    name: 'الذهب الإمبراطوري 24K ⭐',
+    category: 'gold',
+    previewColors: ['#211804', '#050402', '#f59e0b', '#fef3c7']
+  },
+  {
+    id: 'dubai-pearl-gold',
+    name: 'ذهب لؤلؤة دبي الملكي 👑',
+    category: 'gold',
+    previewColors: ['#1c1608', '#070502', '#fbbf24', '#fef9c3']
+  },
+  {
+    id: 'pharaonic-sun-gold',
+    name: 'شمس الذهب الفرعوني ☀️',
+    category: 'gold',
+    previewColors: ['#261704', '#0a0601', '#f59e0b', '#fef3c7']
+  },
+  {
+    id: 'champagne-velvet-gold',
+    name: 'المخمل والشمبانيا الذهبي 🥂',
+    category: 'gold',
+    previewColors: ['#201912', '#080604', '#d97706', '#fef3c7']
+  },
+  {
+    id: 'alhambra-arabesque-gold',
+    name: 'نقوش قصر الحمراء والذهب 🏰',
+    category: 'gold',
+    previewColors: ['#271504', '#080401', '#eab308', '#fef3c7']
+  },
+  {
+    id: 'andalusian-jasmine-palace',
+    name: 'الياسمين الأندلسي وقصر المورق 🌿',
+    category: 'nature',
+    previewColors: ['#032318', '#01100b', '#10b981', '#ecfdf5']
+  },
+  {
+    id: 'imperial-obsidian-gold',
+    name: 'السبج الأسود والذهب الإمبراطوري 🖤',
+    category: 'royal',
+    previewColors: ['#141416', '#09090b', '#f59e0b', '#ffffff']
+  },
+  {
+    id: 'persian-lapis-lazuli',
+    name: 'لازورد نيسابور وقباب أصفهان 🔷',
+    category: 'royal',
+    previewColors: ['#0b162c', '#040914', '#38bdf8', '#f0f9ff']
+  },
+  {
+    id: 'royal-oud-ambergris',
+    name: 'العود الملكي والعنبر الفاخر 🪵',
+    category: 'royal',
+    previewColors: ['#22140a', '#0a0502', '#d97706', '#fef3c7']
+  },
+  {
+    id: 'cosmic-aurora-borealis',
+    name: 'الشفق القطبي الكوني 🌌',
+    category: 'royal',
+    previewColors: ['#091426', '#020617', '#818cf8', '#c084fc']
+  },
+  {
+    id: 'emerald-gold-palace',
+    name: 'قصر الزمرد والذهب الملكي 💎',
+    category: 'nature',
+    previewColors: ['#042014', '#010d08', '#10b981', '#f59e0b']
+  },
+  {
+    id: 'midnight-neon-cyber',
+    name: 'النيون السيبراني منتصف الليل ⚡',
+    category: 'royal',
+    previewColors: ['#0a0f1d', '#020617', '#06b6d4', '#f43f5e']
+  },
+  {
+    id: 'royal-crimson-velvet',
+    name: 'المخمل القرمزي الملكي 🍷',
+    category: 'royal',
+    previewColors: ['#260810', '#0f0205', '#e11d48', '#fef2f2']
+  },
+  {
+    id: 'desert-dune-gold',
+    name: 'كثبان الصحراء الذهبية 🏜️',
+    category: 'gold',
+    previewColors: ['#2b1b0b', '#0d0803', '#f59e0b', '#fffbeb']
+  },
+  {
+    id: 'arctic-sapphire-frost',
+    name: 'جليد الياقوت القطبي ❄️',
+    category: 'royal',
+    previewColors: ['#0a192f', '#030b14', '#60a5fa', '#f0f9ff']
+  },
+  {
+    id: 'golden-brown-harmony',
+    name: 'البني والذهبي المتناسق 🤎',
+    category: 'gold',
+    previewColors: ['#1f1610', '#0a0705', '#d97706', '#fef3c7']
+  },
+  {
+    id: 'dam-ghazal-royal',
+    name: 'دم الغزال الملكي الفاخر 🩸',
+    category: 'royal',
+    previewColors: ['#2a0910', '#100205', '#f43f5e', '#ffffff']
+  },
+  {
+    id: 'royal-turquoise',
+    name: 'الفيروز الملكي الصافي 💠',
+    category: 'royal',
+    previewColors: ['#08242a', '#020e11', '#06b6d4', '#ecfeff']
+  },
+  {
+    id: 'sunset-bronze',
+    name: 'برونز الغروب الساحر 🌅',
+    category: 'royal',
+    previewColors: ['#26130b', '#0f0603', '#f97316', '#ffedd5']
+  },
+  {
+    id: 'amethyst-velvet',
+    name: 'مخمل الجمشت البنفسجي 🔮',
+    category: 'royal',
+    previewColors: ['#1b0c26', '#09030f', '#a855f7', '#faf5ff']
+  },
+  {
+    id: 'dark-gold',
+    name: 'الذهبي الداكن الكلاسيكي 🪙',
+    category: 'gold',
+    previewColors: ['#1c160e', '#090704', '#d97706', '#fef3c7']
+  },
+  {
+    id: 'royal-gold-brown',
+    name: 'الذهبي البني الملكي 👑',
+    category: 'gold',
+    previewColors: ['#23170e', '#0c0704', '#d97706', '#fef3c7']
+  },
+  {
+    id: 'dam-ghazal',
+    name: 'دم الغزال الكلاسيكي 🍁',
+    category: 'classic',
+    previewColors: ['#2d0e14', '#120407', '#e11d48', '#fff1f2']
+  },
+  {
+    id: 'sapphire-night',
+    name: 'ليالي الياقوت الأزرق 🌌',
+    category: 'classic',
+    previewColors: ['#0f172a', '#020617', '#3b82f6', '#eff6ff']
+  },
+  {
+    id: 'emerald-sand',
+    name: 'رمال الزمرد الخضراء 🌴',
+    category: 'nature',
+    previewColors: ['#062419', '#02100a', '#10b981', '#ecfdf5']
+  },
+  {
+    id: 'violet-twilight',
+    name: 'شفق البنفسج 🌆',
+    category: 'classic',
+    previewColors: ['#1e102d', '#0b0412', '#8b5cf6', '#f5f3ff']
+  },
+  {
+    id: 'amber-oasis',
+    name: 'واحة العنبر الدافئة 🌾',
+    category: 'nature',
+    previewColors: ['#291a0b', '#100a03', '#f59e0b', '#fffbeb']
+  },
+  {
+    id: 'ruby-velvet',
+    name: 'مخمل الياقوت الأحمر 🌹',
+    category: 'classic',
+    previewColors: ['#28080e', '#0e0204', '#ef4444', '#fef2f2']
+  },
+  {
+    id: 'deep-ocean',
+    name: 'أعماق المحيط الفيروزي 🌊',
+    category: 'nature',
+    previewColors: ['#08202b', '#020d12', '#0284c7', '#f0f9ff']
+  },
+  {
+    id: 'emerald-forest',
+    name: 'غابة الزمرد الساحرة 🌲',
+    category: 'nature',
+    previewColors: ['#052316', '#010f08', '#059669', '#ecfdf5']
+  }
+];
+
 export function buildThemeDefinitionFromCustom(preset: CustomThemePreset): ThemeDefinition {
   return {
     id: preset.id,

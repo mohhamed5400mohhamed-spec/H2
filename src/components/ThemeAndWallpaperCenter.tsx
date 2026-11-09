@@ -48,6 +48,7 @@ export interface ThemeAndWallpaperCenterProps {
   onToggleParticles: () => void;
   currentUserRole?: string;
   customThemes?: CustomThemePreset[];
+  onEditThemeInStudio?: (themeId: string) => void;
   onApplyGlobalAppearance?: (app: { theme?: string; fontFamily?: string; fontWeight?: 'thin' | 'normal' | 'default' | 'bold' | 'black'; wallpaper?: string; bubbleStyle?: string }) => void;
   onShowToast: (msg: string, type?: 'info' | 'success' | 'error') => void;
 }
@@ -606,6 +607,7 @@ export const ThemeAndWallpaperCenter: React.FC<ThemeAndWallpaperCenterProps> = (
   onToggleParticles,
   currentUserRole,
   customThemes = [],
+  onEditThemeInStudio,
   onApplyGlobalAppearance,
   onShowToast
 }) => {
@@ -621,7 +623,9 @@ export const ThemeAndWallpaperCenter: React.FC<ThemeAndWallpaperCenterProps> = (
 
   const allMergedThemes = React.useMemo(() => {
     const customDefs = (customThemes || []).map((ct) => buildThemeDefinitionFromCustom(ct));
-    return [...customDefs, ...THEMES_LIST];
+    const customIds = new Set(customDefs.map((c) => c.id));
+    const nonOverriddenBuiltIns = THEMES_LIST.filter((th) => !customIds.has(th.id));
+    return [...customDefs, ...nonOverriddenBuiltIns];
   }, [customThemes]);
 
   const filteredThemes = allMergedThemes.filter((th) => {
@@ -769,8 +773,10 @@ export const ThemeAndWallpaperCenter: React.FC<ThemeAndWallpaperCenterProps> = (
               {filteredThemes.map((th) => {
                 const isActive = activeTheme === th.id;
                 return (
-                  <button
+                  <div
                     key={th.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       onChangeTheme(th.id);
                       onApplyGlobalAppearance?.({ theme: th.id });
@@ -781,6 +787,12 @@ export const ThemeAndWallpaperCenter: React.FC<ThemeAndWallpaperCenterProps> = (
                         onChangeNameColor(th.recommendedNameColor);
                       }
                       onShowToast(`تم تعميم ثيم: ${th.name} على الشات كامل 📢`, 'success');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        onChangeTheme(th.id);
+                        onApplyGlobalAppearance?.({ theme: th.id });
+                      }
                     }}
                     className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer relative group ${
                       isActive
@@ -824,7 +836,23 @@ export const ThemeAndWallpaperCenter: React.FC<ThemeAndWallpaperCenterProps> = (
                         حقول + خط ذهبي
                       </span>
                     ) : null}
-                  </button>
+
+                    {/* Admin Theme Color Customization Shortcut */}
+                    {onEditThemeInStudio && (currentUserRole === 'admin' || currentUserRole === 'super' || currentUserRole === 'hassan') && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditThemeInStudio(th.id);
+                        }}
+                        className="mt-2 w-full py-1 px-1.5 rounded-lg text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 text-amber-300 border border-amber-500/30 transition-all flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-95"
+                        title="تعديل وتخصيص ألوان هذا الثيم في استوديو الألوان بلوحة التحكم"
+                      >
+                        <Palette className="w-3 h-3" />
+                        <span>تعديل الألوان 🎨</span>
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>

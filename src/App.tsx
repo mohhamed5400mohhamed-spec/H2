@@ -724,6 +724,17 @@ export default function App() {
   useEffect(() => {
     activeDrawerRef.current = activeDrawer;
   }, [activeDrawer]);
+  const [adminInitialTab, setAdminInitialTab] = useState<
+    'moderation' | 'roomControls' | 'security' | 'bans' | 'broadcast' | 'stats' | 'memos' | 'words' | 'shortcuts' | 'logs' | 'matrix' | 'welcome' | 'emblems' | 'colors'
+  >('moderation');
+  const [adminInitialThemeToEdit, setAdminInitialThemeToEdit] = useState<string | undefined>(undefined);
+
+  const handleOpenColorStudioWithTheme = (themeId: string) => {
+    setShowThemesModal(false);
+    setAdminInitialTab('colors');
+    setAdminInitialThemeToEdit(themeId);
+    setActiveDrawer('monitor');
+  };
   const [searchUserQuery, setSearchUserQuery] = useState('');
   const [rosterUsers, setRosterUsers] = useState<User[]>([]);
   const [allConnectedUsers, setAllConnectedUsers] = useState<User[]>([]);
@@ -1218,9 +1229,9 @@ export default function App() {
   // the server's globalAppearance payload and replace them before the app is shown.
   const [activeTheme, setActiveTheme] = useState<string>(() => {
     try {
-      return localStorage.getItem('soqoor_theme') || 'dark-gold';
+      return localStorage.getItem('soqoor_theme') || 'pearl-gray-calm';
     } catch {
-      return 'dark-gold';
+      return 'pearl-gray-calm';
     }
   });
   const [pinnedTopic, setPinnedTopic] = useState<string>('');
@@ -1319,7 +1330,7 @@ export default function App() {
   const curTheme = useMemo(() => {
     const base = activeCustomTheme
       ? buildThemeFullStyleFromCustom(activeCustomTheme.colors)
-      : THEME_STYLES[activeTheme] || THEME_STYLES['golden-brown-harmony'];
+      : THEME_STYLES[activeTheme] || THEME_STYLES['pearl-gray-calm'];
     return isNightMode ? buildNightModeTheme(base) : base;
   }, [activeCustomTheme, activeTheme, isNightMode]);
 
@@ -4409,48 +4420,47 @@ export default function App() {
 
   // Unified Appearance & Styling Preference Updaters (حفظ دائم واستمرارية أسبوعية حتى بعد الخروج والعودة)
   const handleUpdateTheme = (themeId: string) => {
-    const canControlTheme =
-      currentUser?.role === 'hassan' ||
-      currentUser?.role === 'admin' ||
-      currentUser?.role === 'super' ||
-      getRoleLevel(currentUser?.role) >= 75;
-    if (!canControlTheme) {
-      showToast('الثيم العام يحدده مدير النظام أو الإدارة العليا فقط.', 'info');
-      return;
-    }
-
     setActiveTheme(themeId);
     try {
       localStorage.setItem('soqoor_theme', themeId);
       localStorage.setItem('soqoor_theme_user_set', 'true');
     } catch {}
 
-    // A theme changes the chat surface only. Member name/message colors are
-    // personal account settings and must never be overwritten by the admin theme.
     setCurrentUser((prev) => (prev ? { ...prev, theme: themeId } : null));
 
     // Broadcast globally to all chat members if Supreme, Admin or Super
-    if (currentUser?.role === 'hassan' || currentUser?.role === 'admin' || currentUser?.role === 'super' || getRoleLevel(currentUser?.role) >= 75) {
-      socket?.emit('updateGlobalAppearance', {
-        theme: themeId
-      });
-      showToast('تم تعميم الثيم على كافة المتواجدين والغرف بنجاح! 🎨📢', 'success');
+    const canBroadcast =
+      currentUser?.role === 'hassan' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'super' ||
+      getRoleLevel(currentUser?.role) >= 75;
+
+    if (canBroadcast) {
+      socket?.emit('updateGlobalAppearance', { theme: themeId });
+      showToast('تم تطبيق الثيم وتعميمه على كافة المتواجدين والغرف بنجاح! 🎨📢', 'success');
+    } else {
+      showToast('تم تطبيق الثيم الجديد بنجاح! 🎨', 'success');
     }
   };
 
   const handleUpdateFontFamily = (fontId: string) => {
-    if (currentUser?.role !== 'hassan' && currentUser?.role !== 'admin' && currentUser?.role !== 'super') {
-      showToast('الخط العام يحدده مدير النظام فقط.', 'info');
-      return;
-    }
     setFontFamily(fontId);
     try {
       localStorage.setItem('soqoor_font', fontId);
+      localStorage.setItem('soqoor_font_family', fontId);
       localStorage.setItem('soqoor_font_user_set', 'true');
     } catch {}
-    if (currentUser?.role === 'hassan' || currentUser?.role === 'admin' || currentUser?.role === 'super') {
+
+    const canBroadcast =
+      currentUser?.role === 'hassan' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'super';
+
+    if (canBroadcast) {
       socket?.emit('updateGlobalAppearance', { fontFamily: fontId });
       showToast('تم تعميم نوع الخط على كافة المتواجدين والغرف بنجاح! 🖋️📢', 'success');
+    } else {
+      showToast('تم تغيير نوع الخط بنجاح! 🖋️', 'success');
     }
   };
 
@@ -4473,32 +4483,42 @@ export default function App() {
   };
 
   const handleUpdateWallpaper = (wallpaperId: string) => {
-    if (currentUser?.role !== 'hassan' && currentUser?.role !== 'admin' && currentUser?.role !== 'super') {
-      showToast('خلفية الشات يحددها مدير النظام فقط.', 'info');
-      return;
-    }
     setActiveWallpaper(wallpaperId);
     try {
       localStorage.setItem('soqoor_wallpaper', wallpaperId);
+      localStorage.setItem('soqoor_wallpaper_user_set', 'true');
     } catch {}
-    if (currentUser?.role === 'hassan' || currentUser?.role === 'admin' || currentUser?.role === 'super') {
+
+    const canBroadcast =
+      currentUser?.role === 'hassan' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'super';
+
+    if (canBroadcast) {
       socket?.emit('updateGlobalAppearance', { wallpaper: wallpaperId });
       showToast('تم تعميم الخلفية على كافة المتواجدين والغرف بنجاح! 🖼️📢', 'success');
+    } else {
+      showToast('تم تغيير خلفية الشات بنجاح! 🖼️', 'success');
     }
   };
 
   const handleUpdateBubbleStyle = (styleId: string) => {
-    if (currentUser?.role !== 'hassan' && currentUser?.role !== 'admin' && currentUser?.role !== 'super') {
-      showToast('نمط الفقاعات يحدده مدير النظام فقط.', 'info');
-      return;
-    }
     setBubbleStyle(styleId);
     try {
       localStorage.setItem('soqoor_bubble_style', styleId);
+      localStorage.setItem('soqoor_bubble_user_set', 'true');
     } catch {}
-    if (currentUser?.role === 'hassan' || currentUser?.role === 'admin' || currentUser?.role === 'super') {
+
+    const canBroadcast =
+      currentUser?.role === 'hassan' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'super';
+
+    if (canBroadcast) {
       socket?.emit('updateGlobalAppearance', { bubbleStyle: styleId });
       showToast('تم تعميم شكل الفقاعات على كافة المتواجدين والغرف بنجاح! 💬📢', 'success');
+    } else {
+      showToast('تم تغيير شكل الفقاعات بنجاح! 💬', 'success');
     }
   };
 
@@ -12102,6 +12122,8 @@ export default function App() {
             <ModalErrorBoundary>
               <Suspense fallback={<div className="p-8 text-center text-amber-400 font-bold">جاري فتح لوحة الإدارة...</div>}><AdminControlSuite
               currentUser={currentUser}
+              initialTab={adminInitialTab}
+              initialThemeToEdit={adminInitialThemeToEdit}
               rosterUsers={rosterUsers}
               allRegisteredMembers={allRegisteredMembers}
               roomsList={roomsList}
@@ -12244,7 +12266,10 @@ export default function App() {
               onGrantMemberGift={(username, giftUrl, giftTitle) => socket?.emit('grantMemberGift', { username, giftUrl, giftTitle })}
               onRemoveMemberGift={(username, giftUrl) => socket?.emit('removeMemberGift', { username, giftUrl })}
               socket={socket}
-              onClose={() => setActiveDrawer("none")}
+              onClose={() => {
+                setActiveDrawer("none");
+                setAdminInitialThemeToEdit(undefined);
+              }}
               showToast={showToast}
             />
             </Suspense>
@@ -14116,6 +14141,7 @@ export default function App() {
                   } catch {}
                 }}
                 currentUserRole={currentUser?.role}
+                onEditThemeInStudio={handleOpenColorStudioWithTheme}
                 onApplyGlobalAppearance={handleApplyGlobalAppearance}
                 onShowToast={showToast}
               />

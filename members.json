@@ -8,35 +8,38 @@
     "likes": 10000,
     "points": 2000000,
     "honorBadge": "👑 المدير التنفيذي",
-    "ipAddress": "185.80.142.139",
+    "ipAddress": "176.123.17.246",
     "deviceInfo": "هاتف أندرويد (Android)",
-    "deviceFingerprint": "Android|8||btt37i|1e47r47|lrbp2b|1mh1c9f|1l301n7|1z0n5po|255ea601.Chrome",
-    "lastSeen": 1793892475389,
+    "deviceFingerprint": "Android|8||btt37i|1e47r47|lrbp2b|1mh1c9f|1ied92x|1z0n5po|35f743d3.Chrome",
+    "lastSeen": 1794238913529,
     "nameColor": "#d97706",
     "textColor": "#0f172a",
     "nameGradient": "from-amber-400 to-yellow-200",
-    "theme": "golden-brown-harmony",
-    "fontFamily": "Noto Naskh Arabic",
+    "theme": "pearl-gray-calm",
+    "fontFamily": "Cairo",
     "wallpaper": "default",
     "bubbleStyle": "modern",
     "fontSize": "base",
     "engagement": {
-      "activeTimeMinutes": 22,
+      "activeTimeMinutes": 26,
       "messagesSent": 0,
       "wallPostsCount": 0,
       "micTimeMinutes": 0,
       "starsLevel": 0.4,
-      "progressPercent": 37
+      "progressPercent": 43
     },
     "ipHistory": [
-      "185.80.142.139"
+      "185.80.142.139",
+      "176.123.17.246"
     ],
     "deviceHistory": [
       "هاتف أندرويد (Android)"
     ],
     "fingerprintHistory": [
-      "Android|8||btt37i|1e47r47|lrbp2b|1mh1c9f|1l301n7|1z0n5po|255ea601.Chrome"
-    ]
+      "Android|8||btt37i|1e47r47|lrbp2b|1mh1c9f|1l301n7|1z0n5po|255ea601.Chrome",
+      "Android|8||btt37i|1e47r47|lrbp2b|1mh1c9f|1ied92x|1z0n5po|35f743d3.Chrome"
+    ],
+    "isIncognito": false
   },
   "زائر اختبار": {
     "password": "$2b$10$YbQgAnOHK6PTBsTL9EnWle3RhCY2mZhq2dD9Rx857YlEEAyLW8ojK",
@@ -53,8 +56,8 @@
     "nameColor": "#d97706",
     "textColor": "#0f172a",
     "nameGradient": "from-amber-400 to-yellow-200",
-    "theme": "golden-brown-harmony",
-    "fontFamily": "Noto Naskh Arabic",
+    "theme": "pearl-gray-calm",
+    "fontFamily": "Cairo",
     "wallpaper": "default",
     "bubbleStyle": "modern",
     "fontSize": "base",
