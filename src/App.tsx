@@ -12660,6 +12660,11 @@ export default function App() {
                   يُظهر مشغلاً صوتياً باسم الشات والمتصفح في شريط إشعارات الهاتف وشاشة القفل، مما يمنع متصفح Chrome ونظام الهاتف من تجميد الشات أو قطع اتصالك عند قفل الشاشة أو الانتقال إلى تطبيقات أخرى (مثل واتساب).
                 </p>
 
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 text-[10px] text-amber-200/90 flex items-start gap-1.5 font-medium leading-relaxed">
+                  <span className="text-amber-400 text-xs">⚡</span>
+                  <span><strong>إعادة التشغيل التلقائي الذاتي (Auto-Revival):</strong> شغال تلقائياً؛ إذا توقف المشغل بسبب ورود مكالمة هاتفية، أو تشغيل فيديو آخر، أو إغلاق الشاشة، يعيد تشغيل نفسه تلقائياً لضمان بقائك أونلاين وعدم قطع الاتصال أبداً!</span>
+                </div>
+
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     type="button"

@@ -130,28 +130,55 @@ export function updateMediaSessionMetadata(info?: Partial<MediaSessionInfo>): vo
         resumeKeepAliveAudio();
       });
       navigator.mediaSession.setActionHandler('pause', () => {
-        pauseKeepAliveAudio();
+        // Instant/short pause feedback followed by immediate auto-restart (as in chat keep-alive platforms)
+        if (silentAudioEl) {
+          try {
+            silentAudioEl.pause();
+            if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+              navigator.mediaSession.playbackState = 'paused';
+            }
+          } catch {}
+        }
+        if (autoRevivalTimer) clearTimeout(autoRevivalTimer);
+        autoRevivalTimer = setTimeout(() => {
+          if (isKeepAliveActive) {
+            resumeKeepAliveAudio();
+          }
+        }, 1200);
       });
       navigator.mediaSession.setActionHandler('stop', () => {
-        pauseKeepAliveAudio();
+        if (autoRevivalTimer) clearTimeout(autoRevivalTimer);
+        autoRevivalTimer = setTimeout(() => {
+          if (isKeepAliveActive) {
+            resumeKeepAliveAudio();
+          }
+        }, 1200);
       });
       navigator.mediaSession.setActionHandler('seekto', () => {});
-      navigator.mediaSession.setActionHandler('previoustrack', () => {});
-      navigator.mediaSession.setActionHandler('nexttrack', () => {});
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        resumeKeepAliveAudio();
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        resumeKeepAliveAudio();
+      });
     } catch {}
   } catch (err) {
     console.warn('Failed to configure MediaSession:', err);
   }
 }
 
+let isKeepAliveActive = false;
+let autoRevivalTimer: any = null;
+
 /**
  * 2. Start Silent Audio Loop (Mobile OS Keep-Alive & Android Notification Media Player)
  * iOS Safari and Android Chrome grant high priority and un-throttled
  * network/timers to web applications actively playing media.
- * This triggers the system Media Player card in the Android notification bar!
+ * Features Continuous Auto-Revival Watchdog: Automatically restarts if paused by user, OS or call!
  */
 export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): void {
   try {
+    isKeepAliveActive = true;
     if (info) {
       currentMediaInfo = { ...currentMediaInfo, ...info };
     }
@@ -164,6 +191,35 @@ export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): voi
       silentAudioEl.setAttribute('playsinline', 'true');
       silentAudioEl.setAttribute('webkit-playsinline', 'true');
       silentAudioEl.setAttribute('x-webkit-airplay', 'allow');
+
+      // Auto-Revival Watchdog Listeners: If audio stops due to interruption, pause button, call, or loop, auto-restart!
+      silentAudioEl.addEventListener('ended', () => {
+        if (isKeepAliveActive) {
+          silentAudioEl?.play().catch(() => {});
+        }
+      });
+
+      silentAudioEl.addEventListener('pause', () => {
+        if (isKeepAliveActive) {
+          if (autoRevivalTimer) clearTimeout(autoRevivalTimer);
+          autoRevivalTimer = setTimeout(() => {
+            if (isKeepAliveActive && silentAudioEl?.paused) {
+              resumeKeepAliveAudio();
+            }
+          }, 1200);
+        }
+      });
+
+      silentAudioEl.addEventListener('error', () => {
+        if (isKeepAliveActive) {
+          setTimeout(() => {
+            if (silentAudioEl) {
+              silentAudioEl.src = getOrCreateSilentWavBlobUrl();
+              resumeKeepAliveAudio();
+            }
+          }, 1500);
+        }
+      });
     } else if (silentAudioEl.src !== blobUrl) {
       silentAudioEl.src = blobUrl;
     }
@@ -177,7 +233,7 @@ export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): voi
     }).catch(() => {
       // Browsers require user interaction before autoplay
       const playOnUserAction = () => {
-        if (silentAudioEl) {
+        if (silentAudioEl && isKeepAliveActive) {
           silentAudioEl.play().then(() => {
             if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
               navigator.mediaSession.playbackState = 'playing';
@@ -202,9 +258,19 @@ export function pauseKeepAliveAudio(): void {
       }
     } catch {}
   }
+  // Even when paused via function, automatically restart after 1.2s to prevent phone from killing chat
+  if (isKeepAliveActive) {
+    if (autoRevivalTimer) clearTimeout(autoRevivalTimer);
+    autoRevivalTimer = setTimeout(() => {
+      if (isKeepAliveActive && silentAudioEl?.paused) {
+        resumeKeepAliveAudio();
+      }
+    }, 1200);
+  }
 }
 
 export function resumeKeepAliveAudio(): void {
+  isKeepAliveActive = true;
   if (silentAudioEl) {
     try {
       silentAudioEl.play().then(() => {
@@ -223,6 +289,11 @@ export function isKeepAliveAudioPlaying(): boolean {
 }
 
 export function stopSilentAudioKeepAlive(): void {
+  isKeepAliveActive = false;
+  if (autoRevivalTimer) {
+    clearTimeout(autoRevivalTimer);
+    autoRevivalTimer = null;
+  }
   if (silentAudioEl) {
     try {
       silentAudioEl.pause();
@@ -290,6 +361,11 @@ export function startHeartbeatWorker(socket: Socket): void {
           activeSocket.connect();
         }
 
+        // Auto-Revival Watchdog: Ensure keep-alive media player stays continuously alive
+        if (isKeepAliveActive && silentAudioEl && silentAudioEl.paused) {
+          resumeKeepAliveAudio();
+        }
+
         // Check background elapsed time: change to yellow (away) only after 2 full minutes
         if (typeof document !== 'undefined' && document.hidden && backgroundStartTime !== null && !hasEmittedAway) {
           const elapsed = Date.now() - backgroundStartTime;
@@ -309,6 +385,9 @@ export function startHeartbeatWorker(socket: Socket): void {
     fallbackTimer = setInterval(() => {
       if (activeSocket?.connected) {
         activeSocket.emit('keepAlivePing', { timestamp: Date.now() });
+      }
+      if (isKeepAliveActive && silentAudioEl && silentAudioEl.paused) {
+        resumeKeepAliveAudio();
       }
       if (typeof document !== 'undefined' && document.hidden && backgroundStartTime !== null && !hasEmittedAway) {
         const elapsed = Date.now() - backgroundStartTime;
@@ -359,6 +438,11 @@ export function setupVisibilityResync(socket: Socket, onWake?: (wasDisconnected:
     hasEmittedAway = false;
 
     requestScreenWakeLock();
+
+    // Auto-Revive Media Session Keep-Alive Player on returning to foreground
+    if (isKeepAliveActive && (!silentAudioEl || silentAudioEl.paused)) {
+      resumeKeepAliveAudio();
+    }
 
     if (activeSocket) {
       const wasDisconnected = !activeSocket.connected;
