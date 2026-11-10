@@ -2,25 +2,43 @@
 
 import { Socket } from 'socket.io-client';
 
+// Global dynamic TURN/STUN configuration for bypassing firewalls & VoIP blocks in countries with strict NATs
+const customTurnUrl = (typeof window !== 'undefined' && (window as any).__CHATHASSAN_TURN_URL__) || import.meta.env.VITE_TURN_SERVER_URL;
+const customTurnUser = (typeof window !== 'undefined' && (window as any).__CHATHASSAN_TURN_USER__) || import.meta.env.VITE_TURN_USERNAME;
+const customTurnPass = (typeof window !== 'undefined' && (window as any).__CHATHASSAN_TURN_PASS__) || import.meta.env.VITE_TURN_CREDENTIAL;
+
+const defaultTurnServers: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+  {
+    // TURN over TLS on Port 443 (HTTPS port) - Bypasses DPI & ISP VoIP blocking in UAE, Oman, Qatar, KSA, etc.
+    urls: [
+      'turns:openrelay.metered.ca:443?transport=tcp',
+      'turn:openrelay.metered.ca:443?transport=tcp',
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443'
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  }
+];
+
+if (customTurnUrl) {
+  defaultTurnServers.unshift({
+    urls: customTurnUrl.split(','),
+    username: customTurnUser || undefined,
+    credential: customTurnPass || undefined
+  });
+}
+
 const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp'
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  ],
-  iceCandidatePoolSize: 10
+  iceServers: defaultTurnServers,
+  iceCandidatePoolSize: 10,
+  iceTransportPolicy: 'all',
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require'
 };
 
 export interface RemoteVoicePeer {
