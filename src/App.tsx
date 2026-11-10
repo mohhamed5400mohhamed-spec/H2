@@ -159,6 +159,10 @@ import {
   requestScreenWakeLock,
   startSilentAudioKeepAlive,
   stopSilentAudioKeepAlive,
+  pauseKeepAliveAudio,
+  resumeKeepAliveAudio,
+  isKeepAliveAudioPlaying,
+  updateMediaSessionMetadata,
   startHeartbeatWorker,
   stopHeartbeatWorker,
   setupVisibilityResync,
@@ -1092,6 +1096,34 @@ export default function App() {
       setIsPmDisabled(Boolean(currentUser.isPmDisabled));
     }
   }, [currentUser?.isPmDisabled]);
+
+  // Mobile Media Player Keep-Alive & Notification Bar Integration
+  const [keepAlivePlayerEnabled, setKeepAlivePlayerEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('soqoor_keepalive_player') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [isKeepAlivePlayingState, setIsKeepAlivePlayingState] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (currentUser && keepAlivePlayerEnabled) {
+      updateMediaSessionMetadata({
+        title: `شات حسان برو | ${currentUser.room || 'الغرفة العامة'} 💬`,
+        artist: `${currentUser.username} • متصل ونشط في الخلفية 🟢 • انقر للعودة`,
+        album: typeof window !== 'undefined' ? (window.location.hostname || 'شات حسان برو') : 'شات حسان برو'
+      });
+      startSilentAudioKeepAlive({
+        title: `شات حسان برو | ${currentUser.room || 'الغرفة العامة'} 💬`,
+        artist: `${currentUser.username} • متصل ونشط في الخلفية 🟢 • انقر للعودة`
+      });
+      setIsKeepAlivePlayingState(true);
+    } else if (!keepAlivePlayerEnabled) {
+      stopSilentAudioKeepAlive();
+      setIsKeepAlivePlayingState(false);
+    }
+  }, [currentUser?.username, currentUser?.room, keepAlivePlayerEnabled]);
 
   // Dedicated Sound Center Modal & Test Sequencer (مركز التنبيهات الصوتية المخصصة)
   const [showSoundModal, setShowSoundModal] = useState<boolean>(false);
@@ -12606,6 +12638,82 @@ export default function App() {
                   {allNotificationsDisabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
                   <span>{allNotificationsDisabled ? 'تفعيل وتشغيل التنبيهات 🔔' : 'تعطيل وإيقاف التنبيهات بالكامل 🔕'}</span>
                 </button>
+              </div>
+
+              {/* 3. Mobile Notification Media Player & Keep-Alive (مشغل الشات في شريط إشعارات الهاتف لمنع التجميد) */}
+              <div className="p-3.5 rounded-xl border-2 border-amber-500/80 bg-gradient-to-b from-[#221810] to-[#140e09] text-right space-y-2.5 shadow-md">
+                <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+                    <Radio className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <span>مشغل الشات في شريط إشعارات الهاتف 📱🎵</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 ${
+                    keepAlivePlayerEnabled && isKeepAlivePlayingState
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                      : 'bg-slate-800 text-slate-300 border border-slate-600'
+                  }`}>
+                    {keepAlivePlayerEnabled && isKeepAlivePlayingState ? '🟢 نشط في الإشعارات' : '⚪ متوقف'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-amber-100/85 leading-relaxed">
+                  يُظهر مشغلاً صوتياً باسم الشات والمتصفح في شريط إشعارات الهاتف وشاشة القفل، مما يمنع متصفح Chrome ونظام الهاتف من تجميد الشات أو قطع اتصالك عند قفل الشاشة أو الانتقال إلى تطبيقات أخرى (مثل واتساب).
+                </p>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextState = !keepAlivePlayerEnabled;
+                      setKeepAlivePlayerEnabled(nextState);
+                      try {
+                        localStorage.setItem('soqoor_keepalive_player', String(nextState));
+                      } catch {}
+                      if (nextState) {
+                        startSilentAudioKeepAlive({
+                          title: `شات حسان برو | ${currentUser?.room || 'الغرفة العامة'} 💬`,
+                          artist: `${currentUser?.username || 'ضيف'} • متصل ونشط 🟢`
+                        });
+                        setIsKeepAlivePlayingState(true);
+                        showToast('تم تفعيل مشغل الشات وإبقاء الاتصال حياً في شريط الإشعارات 📱🟢', 'success');
+                      } else {
+                        stopSilentAudioKeepAlive();
+                        setIsKeepAlivePlayingState(false);
+                        showToast('تم إيقاف مشغل الشات في شريط الإشعارات ⏹️', 'info');
+                      }
+                    }}
+                    className={`flex-1 py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-98 ${
+                      keepAlivePlayerEnabled
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white'
+                        : 'bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white'
+                    }`}
+                  >
+                    <Radio className="w-4 h-4" />
+                    <span>{keepAlivePlayerEnabled ? 'المشغل مفعّل في الإشعارات ✔️' : 'تفعيل المشغل في شريط الإشعارات 📱'}</span>
+                  </button>
+
+                  {keepAlivePlayerEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isKeepAlivePlayingState) {
+                          pauseKeepAliveAudio();
+                          setIsKeepAlivePlayingState(false);
+                          showToast('تم إيقاف المشغل مؤقتاً ⏸️', 'info');
+                        } else {
+                          resumeKeepAliveAudio();
+                          setIsKeepAlivePlayingState(true);
+                          showToast('تم استئناف المشغل في شريط الإشعارات ▶️', 'success');
+                        }
+                      }}
+                      className="px-3 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl font-bold text-xs flex items-center justify-center gap-1 cursor-pointer transition-all"
+                      title={isKeepAlivePlayingState ? 'إيقاف مؤقت' : 'تشغيل الآن'}
+                    >
+                      {isKeepAlivePlayingState ? <VolumeX className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      <span>{isKeepAlivePlayingState ? 'إيقاف مؤقت ⏸️' : 'تشغيل ▶️'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Notification Sounds Customization (تخصيص نغمات التنبيهات حسب نوع الحدث) */}

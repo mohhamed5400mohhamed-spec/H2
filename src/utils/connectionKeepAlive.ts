@@ -9,7 +9,7 @@
 
 import { Socket } from 'socket.io-client';
 
-// Extremely lightweight base64 silent WAV audio data URI (100ms silent audio loop)
+// Extremely lightweight base64 silent WAV audio data URI fallback
 const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 
 let silentAudioEl: HTMLAudioElement | null = null;
@@ -17,6 +17,67 @@ let wakeLockSentinel: any = null;
 let heartbeatWorker: Worker | null = null;
 let fallbackTimer: any = null;
 let activeSocket: Socket | null = null;
+let cachedSilentBlobUrl: string | null = null;
+
+export interface MediaSessionInfo {
+  title?: string;
+  artist?: string;
+  album?: string;
+  artworkUrl?: string;
+}
+
+let currentMediaInfo: MediaSessionInfo = {
+  title: 'شات حسان برو الصوتي | للجوال',
+  artist: 'اتصال مباشر ونشط في الخلفية 🟢 • انقر للعودة',
+  album: typeof window !== 'undefined' ? (window.location.hostname || 'chathassan2031') : 'chathassan2031',
+  artworkUrl: '/favicon.svg'
+};
+
+/**
+ * Generates a valid 10-second silent PCM WAV audio Blob URL.
+ * Android Chrome and mobile OS media services require a real audio stream (>5s)
+ * with active playback to render the system Media Notification card in the notification bar and lock screen.
+ */
+function getOrCreateSilentWavBlobUrl(): string {
+  if (cachedSilentBlobUrl) return cachedSilentBlobUrl;
+  try {
+    const sampleRate = 8000;
+    const durationSeconds = 10;
+    const numChannels = 1;
+    const bytesPerSample = 2; // 16-bit PCM
+    const totalSamples = sampleRate * durationSeconds;
+    const dataSize = totalSamples * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    // RIFF chunk descriptor
+    view.setUint8(0, 0x52); view.setUint8(1, 0x49); view.setUint8(2, 0x46); view.setUint8(3, 0x46); // 'RIFF'
+    view.setUint32(4, 36 + dataSize, true);
+    view.setUint8(8, 0x57); view.setUint8(9, 0x41); view.setUint8(10, 0x56); view.setUint8(11, 0x45); // 'WAVE'
+
+    // fmt sub-chunk
+    view.setUint8(12, 0x66); view.setUint8(13, 0x6d); view.setUint8(14, 0x74); view.setUint8(15, 0x20); // 'fmt '
+    view.setUint32(16, 16, true); // SubChunk1Size (16 for PCM)
+    view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+    view.setUint16(22, numChannels, true); // NumChannels (1)
+    view.setUint32(24, sampleRate, true); // SampleRate (8000)
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true); // ByteRate
+    view.setUint16(32, numChannels * bytesPerSample, true); // BlockAlign
+    view.setUint16(34, 16, true); // BitsPerSample (16)
+
+    // data sub-chunk
+    view.setUint8(36, 0x64); view.setUint8(37, 0x61); view.setUint8(38, 0x74); view.setUint8(39, 0x61); // 'data'
+    view.setUint32(40, dataSize, true);
+
+    // Audio samples are 0x00 (pure silence)
+
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    cachedSilentBlobUrl = URL.createObjectURL(blob);
+    return cachedSilentBlobUrl;
+  } catch {
+    return SILENT_AUDIO_URI;
+  }
+}
 
 /**
  * 1. Request Screen WakeLock to prevent automatic screen sleeping
@@ -37,22 +98,91 @@ export async function requestScreenWakeLock(): Promise<boolean> {
 }
 
 /**
- * 2. Start Silent Audio Loop (Mobile OS Keep-Alive)
+ * Configure MediaSession metadata and action handlers for the Android Notification Bar
+ */
+export function updateMediaSessionMetadata(info?: Partial<MediaSessionInfo>): void {
+  if (info) {
+    currentMediaInfo = { ...currentMediaInfo, ...info };
+  }
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  try {
+    const siteHost = typeof window !== 'undefined' ? (window.location.hostname || 'chathassan2031') : 'chathassan2031';
+    const title = currentMediaInfo.title || 'شات حسان برو الصوتي | للجوال';
+    const artist = currentMediaInfo.artist || 'اتصال مباشر ونشط في الخلفية 🟢 • انقر للعودة';
+    const album = currentMediaInfo.album || siteHost;
+    const artUrl = currentMediaInfo.artworkUrl || '/favicon.svg';
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title,
+      artist,
+      album,
+      artwork: [
+        { src: artUrl, sizes: '96x96', type: 'image/svg+xml' },
+        { src: artUrl, sizes: '128x128', type: 'image/svg+xml' },
+        { src: artUrl, sizes: '192x192', type: 'image/svg+xml' },
+        { src: artUrl, sizes: '256x256', type: 'image/svg+xml' },
+        { src: artUrl, sizes: '512x512', type: 'image/svg+xml' },
+      ]
+    });
+
+    try {
+      navigator.mediaSession.setActionHandler('play', () => {
+        resumeKeepAliveAudio();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        pauseKeepAliveAudio();
+      });
+      navigator.mediaSession.setActionHandler('stop', () => {
+        pauseKeepAliveAudio();
+      });
+      navigator.mediaSession.setActionHandler('seekto', () => {});
+      navigator.mediaSession.setActionHandler('previoustrack', () => {});
+      navigator.mediaSession.setActionHandler('nexttrack', () => {});
+    } catch {}
+  } catch (err) {
+    console.warn('Failed to configure MediaSession:', err);
+  }
+}
+
+/**
+ * 2. Start Silent Audio Loop (Mobile OS Keep-Alive & Android Notification Media Player)
  * iOS Safari and Android Chrome grant high priority and un-throttled
  * network/timers to web applications actively playing media.
+ * This triggers the system Media Player card in the Android notification bar!
  */
-export function startSilentAudioKeepAlive(): void {
+export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): void {
   try {
-    if (!silentAudioEl) {
-      silentAudioEl = new Audio(SILENT_AUDIO_URI);
-      silentAudioEl.loop = true;
-      silentAudioEl.volume = 0.01; // virtually silent
+    if (info) {
+      currentMediaInfo = { ...currentMediaInfo, ...info };
     }
-    silentAudioEl.play().catch(() => {
+    const blobUrl = getOrCreateSilentWavBlobUrl();
+    if (!silentAudioEl) {
+      silentAudioEl = new Audio(blobUrl);
+      silentAudioEl.loop = true;
+      silentAudioEl.volume = 0.01; // Inaudible silence (1% volume) that keeps media pipeline active
+      (silentAudioEl as any).playsInline = true;
+      silentAudioEl.setAttribute('playsinline', 'true');
+      silentAudioEl.setAttribute('webkit-playsinline', 'true');
+      silentAudioEl.setAttribute('x-webkit-airplay', 'allow');
+    } else if (silentAudioEl.src !== blobUrl) {
+      silentAudioEl.src = blobUrl;
+    }
+
+    updateMediaSessionMetadata();
+
+    silentAudioEl.play().then(() => {
+      if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
+    }).catch(() => {
       // Browsers require user interaction before autoplay
       const playOnUserAction = () => {
         if (silentAudioEl) {
-          silentAudioEl.play().catch(() => {});
+          silentAudioEl.play().then(() => {
+            if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+              navigator.mediaSession.playbackState = 'playing';
+            }
+          }).catch(() => {});
         }
         window.removeEventListener('click', playOnUserAction);
         window.removeEventListener('touchstart', playOnUserAction);
@@ -63,11 +193,43 @@ export function startSilentAudioKeepAlive(): void {
   } catch {}
 }
 
+export function pauseKeepAliveAudio(): void {
+  if (silentAudioEl) {
+    try {
+      silentAudioEl.pause();
+      if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
+    } catch {}
+  }
+}
+
+export function resumeKeepAliveAudio(): void {
+  if (silentAudioEl) {
+    try {
+      silentAudioEl.play().then(() => {
+        if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
+      }).catch(() => {});
+    } catch {}
+  } else {
+    startSilentAudioKeepAlive();
+  }
+}
+
+export function isKeepAliveAudioPlaying(): boolean {
+  return !!silentAudioEl && !silentAudioEl.paused;
+}
+
 export function stopSilentAudioKeepAlive(): void {
   if (silentAudioEl) {
     try {
       silentAudioEl.pause();
       silentAudioEl.src = '';
+      if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'none';
+      }
     } catch {}
     silentAudioEl = null;
   }
