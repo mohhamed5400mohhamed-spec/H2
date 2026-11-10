@@ -3519,6 +3519,11 @@ export default function App() {
 
     s.on('micSlotsUpdated', (slots: MicSlot[]) => {
       setMicSlots(slots);
+      if (currentUserRef.current) {
+        const mySlot = slots.find((slotItem) => slotItem.user && (slotItem.user.id === s.id || slotItem.user.username === currentUserRef.current?.username));
+        const newSlotNum = mySlot ? mySlot.slotNumber : null;
+        setCurrentUser((prev) => (prev ? { ...prev, micSlot: newSlotNum, isVoice: newSlotNum !== null } : null));
+      }
     });
 
     s.on('roomUsers', ({ users: updatedUsers }: { users: User[] }) => {
@@ -4735,10 +4740,14 @@ export default function App() {
 
   // Drop Mic
   const handleDropMic = () => {
-    if (!audioManager || !currentUser || currentUser.micSlot === null) return;
-    audioManager.dropMicSlot();
+    if (!socket || !currentUser) return;
+    socket.emit('dropMic');
+    if (audioManager) {
+      audioManager.dropMicSlot();
+    }
+    setCurrentUser((prev) => (prev ? { ...prev, micSlot: null, isVoice: false } : null));
     sounds.playVoiceLeave();
-    showToast('تم النزول من المايك 👋', 'info');
+    showToast('تم النزول من المايك بنجاح 👋', 'info');
   };
 
   // Toggle Room Speaker
@@ -7595,7 +7604,7 @@ export default function App() {
                       <span>{micActionSlot.slotUser.flag}</span>
                     </div>
                     <div className="text-[10px] text-slate-500">
-                      {micActionSlot.slotUser.id === currentUser.id ? 'أنت على هذا المايك' : 'عضو متصل بالمايك'}
+                      {(micActionSlot.slotUser.id === currentUser.id || micActionSlot.slotUser.username === currentUser.username) ? 'أنت على هذا المايك' : 'عضو متصل بالمايك'}
                     </div>
                   </div>
                 </div>
@@ -7603,7 +7612,7 @@ export default function App() {
 
               <div className="space-y-2">
                 {/* OPTION 1: Drop or Pull Mic (إفلات المايك / سحب المايك) */}
-                {micActionSlot.slotUser?.id === currentUser.id ? (
+                {(micActionSlot.slotUser?.id === currentUser.id || micActionSlot.slotUser?.username === currentUser.username) ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -7636,7 +7645,7 @@ export default function App() {
                 ) : null}
 
                 {/* OPTION 2: Mute or Unmute Mic (كتم المايك / إلغاء الكتم) */}
-                {micActionSlot.slotUser?.id === currentUser.id ? (
+                {(micActionSlot.slotUser?.id === currentUser.id || micActionSlot.slotUser?.username === currentUser.username) ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -7836,7 +7845,7 @@ export default function App() {
           <div className="flex-1 grid grid-cols-5 gap-1 px-0.5">
             {micSlots.map((slot) => {
               const isOccupied = !!slot.user;
-              const isMe = isOccupied && slot.user?.id === currentUser.id;
+              const isMe = isOccupied && (slot.user?.id === currentUser.id || slot.user?.username === currentUser.username);
               const isSpeaking = isMe ? micVolume > 12 && !slot.user?.isMuted : slot.user?.isSpeaking;
 
               return (

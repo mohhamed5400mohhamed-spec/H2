@@ -6658,13 +6658,19 @@ io.on('connection', (socket) => {
   // Drop Mic slot
   socket.on('dropMic', () => {
     const user = users.find((u) => u.id === socket.id);
-    if (!user || user.micSlot === null) return;
+    if (!user) return;
 
     const slots = getMicSlotsForRoom(user.room);
-    const slot = slots.find((s) => s.slotNumber === user.micSlot);
-    const releasedNumber = user.micSlot;
+    const slot = slots.find((s) => (user.micSlot !== null && s.slotNumber === user.micSlot) || (s.user && (s.user.id === socket.id || s.user.username.toLowerCase() === user.username.toLowerCase())));
+    const releasedNumber = slot ? slot.slotNumber : (user.micSlot || 1);
 
-    if (slot) slot.user = null;
+    // Free any slot holding this user
+    slots.forEach((s) => {
+      if (s.user && (s.user.id === socket.id || s.user.username.toLowerCase() === user.username.toLowerCase())) {
+        s.user = null;
+      }
+    });
+
     user.micSlot = null;
     user.isVoice = false;
     user.isSpeaking = false;
