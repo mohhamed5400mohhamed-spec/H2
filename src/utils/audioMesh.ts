@@ -41,6 +41,19 @@ const ICE_SERVERS: RTCConfiguration = {
   rtcpMuxPolicy: 'require'
 };
 
+/**
+ * Enforces Opus codec parameters for weak internet & mobile 3G/4G/5G connections:
+ * - usedtx=1: Discontinuous Transmission (0 data sent when silent)
+ * - useinbandfec=1: Forward Error Correction (reconstructs dropped audio packets without retransmitting)
+ * - maxaveragebitrate=24000: Caps bitrate at 24kbps (~3KB/sec) to prevent lag and bufferbloat on slow connections
+ */
+function optimizeSdpForWeakNetworks(sdp: string): string {
+  if (!sdp) return sdp;
+  return sdp
+    .replace(/a=fmtp:111 ((?:(?!usedtx=1).)*)\r\n/g, 'a=fmtp:111 $1;useinbandfec=1;usedtx=1;maxaveragebitrate=24000;stereo=0\r\n')
+    .replace(/a=fmtp:96 ((?:(?!usedtx=1).)*)\r\n/g, 'a=fmtp:96 $1;useinbandfec=1;usedtx=1;maxaveragebitrate=24000;stereo=0\r\n');
+}
+
 export interface RemoteVoicePeer {
   id: string;
   username: string;
@@ -232,9 +245,12 @@ export class AudioMeshManager {
       }
     };
 
-    // Create & send offer
+    // Create & send offer optimized for weak mobile networks
     try {
-      const offer = await pc.createOffer();
+      let offer = await pc.createOffer();
+      if (offer.sdp) {
+        offer = { type: offer.type, sdp: optimizeSdpForWeakNetworks(offer.sdp) };
+      }
       await pc.setLocalDescription(offer);
       this.socket.emit('voiceSignal', {
         targetId,
@@ -280,7 +296,10 @@ export class AudioMeshManager {
     }
 
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
+    let answer = await pc.createAnswer();
+    if (answer.sdp) {
+      answer = { type: answer.type, sdp: optimizeSdpForWeakNetworks(answer.sdp) };
+    }
     await pc.setLocalDescription(answer);
 
     this.socket.emit('voiceSignal', {

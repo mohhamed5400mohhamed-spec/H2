@@ -2401,10 +2401,10 @@ export default function App() {
     const socketOptions = {
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 800,
-      reconnectionDelayMax: 3000,
-      randomizationFactor: 0.2,
-      timeout: 30000,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 1500,
+      randomizationFactor: 0.1,
+      timeout: 20000,
       transports: ['websocket', 'polling'],
       autoConnect: true
     };
@@ -2466,16 +2466,13 @@ export default function App() {
       }
     });
 
-    // Regular ping every 12 seconds
-    const pingTicker = setInterval(() => {
-      if (s.connected) {
-        s.emit('keepAlivePing', { timestamp: Date.now() });
-      }
-    }, 12000);
+    // Background Web Worker Heartbeat: Single authoritative keep-alive engine
+    startHeartbeatWorker(s);
 
     const scheduleReconnectingBanner = () => {
       if (reconnectBannerTimerRef.current) return;
-      const delayMs = Math.max(1, reconnectBannerDelaySecondsRef.current || 4) * 1000;
+      // High-tolerance grace period (minimum 10s) so background app switching never flashes reconnecting alert
+      const delayMs = Math.max(10, reconnectBannerDelaySecondsRef.current || 10) * 1000;
       reconnectBannerTimerRef.current = window.setTimeout(() => {
         reconnectBannerTimerRef.current = null;
         if (!s.connected && currentUserRef.current && !isForcedLoggedOutRef.current) {
@@ -3852,22 +3849,10 @@ export default function App() {
     setSocket(s);
 
     // Setup visibility & phone screen unlock keep-alive synchronization
-    const cleanupVisibility = setupVisibilityResync(s, (wasDisconnected?: boolean) => {
-      const savedToken = localStorage.getItem('soqoor_session_token') || sessionStorage.getItem('soqoor_session_token');
-      const savedUsername = localStorage.getItem('soqoor_session_username') || currentUserRef.current?.username;
+    const cleanupVisibility = setupVisibilityResync(s, () => {
       let currentRoom = currentUserRef.current?.room || 'الغرفة العامة';
-      if (!s.connected || wasDisconnected) {
-        if (savedToken || savedUsername) {
-          s.emit('restoreSession', {
-            sessionToken: savedToken || undefined,
-            username: savedUsername || undefined,
-            room: currentRoom,
-            deviceFingerprint: generateDeviceFingerprint().fingerprintId,
-            isIncognito: isIncognitoClient
-          });
-        }
-      } else {
-        // Socket is still connected: only sync missed room messages since the last received message
+      if (s.connected) {
+        // Socket is connected: sync missed room messages seamlessly
         const roomMsgs = messagesRef.current.filter(
           (m) => m && m.room && m.room.trim().toLowerCase() === currentRoom.trim().toLowerCase()
         );
@@ -3877,6 +3862,11 @@ export default function App() {
             roomId: currentRoom,
             lastTimestamp: lastMsg.timestamp
           });
+        }
+      } else {
+        // If disconnected upon returning, trigger reconnect if idle; s.on('connect') handles session restoration cleanly
+        if (s.disconnected) {
+          s.connect();
         }
       }
     });
@@ -3892,7 +3882,7 @@ export default function App() {
     setAudioManager(manager);
 
     return () => {
-      clearInterval(pingTicker);
+      stopHeartbeatWorker();
       window.clearTimeout(appearanceFallbackTimer);
       cleanupVisibility();
       audioManagerRef.current = null;
@@ -7978,13 +7968,13 @@ export default function App() {
         </header>
 
         {/* Real-time Connection Suspension & Auto-Recovery Banner (شريط استعادة الاتصال وحفظ الجلسة) */}
-        {(!isConnected || connectionState === 'reconnecting') && (
+        {connectionState === 'reconnecting' && currentUser && !isForcedLoggedOutRef.current && (
           <div className="bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold border-b border-amber-300 shadow-lg flex-shrink-0 z-30 animate-in fade-in">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping flex-shrink-0" />
               <div className="min-w-0">
                 <span className="font-black text-amber-100 block text-[11px] leading-tight">
-                  {connectionState === 'reconnecting' ? 'جاري استعادة جلستك الحالية...' : 'الاتصال معلق (ضعف شبكة)'}
+                  جاري استعادة جلستك الحالية...
                 </span>
                 <span className="text-[10px] text-amber-100/90 truncate block">
                   جلستك محفوظة تلقائياً دون انقطاع أو تسجيل دخول جديد
@@ -15432,7 +15422,7 @@ export default function App() {
                     <span className="text-[11px] text-slate-400 font-bold">حالة الاتصال المباشر:</span>
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[11px] font-black flex items-center gap-1.5 ${
-                        !isConnected || connectionState === 'disconnected'
+                        connectionState === 'disconnected'
                           ? 'bg-rose-950 text-rose-300 border border-rose-500/50'
                           : connectionState === 'reconnecting'
                           ? 'bg-amber-950 text-amber-300 border border-amber-500/50 animate-pulse'
@@ -15441,7 +15431,7 @@ export default function App() {
                     >
                       <span
                         className={`w-2 h-2 rounded-full ${
-                          !isConnected || connectionState === 'disconnected'
+                          connectionState === 'disconnected'
                             ? 'bg-rose-500'
                             : connectionState === 'reconnecting'
                             ? 'bg-amber-400 animate-ping'
@@ -15449,7 +15439,7 @@ export default function App() {
                         }`}
                       />
                       <span>
-                        {!isConnected || connectionState === 'disconnected'
+                        {connectionState === 'disconnected'
                           ? 'منقطع الاتصال'
                           : connectionState === 'reconnecting'
                           ? 'جاري استعادة الجلسة'

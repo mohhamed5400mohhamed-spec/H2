@@ -70,8 +70,8 @@ const io = new SocketIOServer(httpServer, {
     credentials: true
   },
   maxHttpBufferSize: 50 * 1024 * 1024, // 50MB buffer
-  pingTimeout: 300000, // 300s (5 minutes) keep-alive tolerance so background app switching does NOT drop socket
-  pingInterval: 25000, // 25s regular heartbeats
+  pingTimeout: 60000, // 60s keep-alive timeout tolerance
+  pingInterval: 8000, // 8s fast heartbeat to prevent mobile carrier NAT / Render proxy drops
   connectTimeout: 45000,
   upgradeTimeout: 30000,
   allowUpgrades: true,
@@ -105,6 +105,13 @@ function toPublicMediaUrl(url: string, req?: express.Request): string {
   }
   return url.startsWith('/') ? url : `/${url}`;
 }
+
+// Ultra-lightweight keepalive endpoint for background Web Worker to keep mobile TCP radio alive
+app.get('/api/keepalive', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Connection', 'keep-alive');
+  res.status(200).json({ ok: true, ts: Date.now() });
+});
 
 // Storage & Database Health / Status Endpoint
 app.get('/api/system/storage-status', (_req, res) => {
@@ -2333,10 +2340,10 @@ let serverSecurity: ServerSecuritySettings = {
   geoRestrictionMode: 'blacklist',
   geoRestrictedCountries: [],
   geoBlockedCustomMessage: '🚫 نعتذر، الدخول غير متاح حالياً من منطقتك الجغرافية وفقاً لسياسة الأمان المتبعة في الدردشة.',
-  offlineGraceSeconds: 45,
-  micGraceSeconds: 45,
+  offlineGraceSeconds: 60,
+  micGraceSeconds: 60,
   awayDelaySeconds: 120,
-  reconnectBannerDelaySeconds: 4,
+  reconnectBannerDelaySeconds: 10,
   likeCooldownSeconds: 60
 };
 

@@ -34,15 +34,15 @@ let currentMediaInfo: MediaSessionInfo = {
 };
 
 /**
- * Generates a valid 10-second silent PCM WAV audio Blob URL.
- * Android Chrome and mobile OS media services require a real audio stream (>5s)
- * with active playback to render the system Media Notification card in the notification bar and lock screen.
+ * Generates a valid 60-second silent PCM WAV audio Blob URL.
+ * 60 seconds provides ultra-smooth notification bar progress, minimizes audio decoder wakeups,
+ * and eliminates CPU/battery overhead from looping every few seconds.
  */
 function getOrCreateSilentWavBlobUrl(): string {
   if (cachedSilentBlobUrl) return cachedSilentBlobUrl;
   try {
     const sampleRate = 8000;
-    const durationSeconds = 10;
+    const durationSeconds = 60; // 60 seconds buffer
     const numChannels = 1;
     const bytesPerSample = 2; // 16-bit PCM
     const totalSamples = sampleRate * durationSeconds;
@@ -76,6 +76,21 @@ function getOrCreateSilentWavBlobUrl(): string {
     return cachedSilentBlobUrl;
   } catch {
     return SILENT_AUDIO_URI;
+  }
+}
+
+/**
+ * Synchronize position state to Android Media Notification bar
+ */
+function syncMediaSessionPositionState(): void {
+  if (typeof navigator !== 'undefined' && 'mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && silentAudioEl) {
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: 60,
+        playbackRate: 1,
+        position: Math.max(0, Math.min(60, silentAudioEl.currentTime || 0))
+      });
+    } catch {}
   }
 }
 
@@ -169,12 +184,14 @@ export function updateMediaSessionMetadata(info?: Partial<MediaSessionInfo>): vo
 
 let isKeepAliveActive = false;
 let autoRevivalTimer: any = null;
+let consecutivePlayFailures = 0;
 
 /**
  * 2. Start Silent Audio Loop (Mobile OS Keep-Alive & Android Notification Media Player)
  * iOS Safari and Android Chrome grant high priority and un-throttled
  * network/timers to web applications actively playing media.
- * Features Continuous Auto-Revival Watchdog: Automatically restarts if paused by user, OS or call!
+ * Features Continuous Auto-Revival Watchdog with Smart Audio Focus Backoff:
+ * Gracefully yields to WhatsApp voice notes, YouTube, and phone calls without fighting for focus.
  */
 export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): void {
   try {
@@ -192,7 +209,12 @@ export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): voi
       silentAudioEl.setAttribute('webkit-playsinline', 'true');
       silentAudioEl.setAttribute('x-webkit-airplay', 'allow');
 
-      // Auto-Revival Watchdog Listeners: If audio stops due to interruption, pause button, call, or loop, auto-restart!
+      // Keep MediaSession seekbar position in sync
+      silentAudioEl.addEventListener('timeupdate', () => {
+        syncMediaSessionPositionState();
+      });
+
+      // Auto-Revival Watchdog Listeners: If audio stops due to loop, ended, or interruption
       silentAudioEl.addEventListener('ended', () => {
         if (isKeepAliveActive) {
           silentAudioEl?.play().catch(() => {});
@@ -202,11 +224,12 @@ export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): voi
       silentAudioEl.addEventListener('pause', () => {
         if (isKeepAliveActive) {
           if (autoRevivalTimer) clearTimeout(autoRevivalTimer);
+          const backoff = consecutivePlayFailures > 2 ? 8000 : 2500;
           autoRevivalTimer = setTimeout(() => {
             if (isKeepAliveActive && silentAudioEl?.paused) {
               resumeKeepAliveAudio();
             }
-          }, 1200);
+          }, backoff);
         }
       });
 
@@ -217,7 +240,7 @@ export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): voi
               silentAudioEl.src = getOrCreateSilentWavBlobUrl();
               resumeKeepAliveAudio();
             }
-          }, 1500);
+          }, 2000);
         }
       });
     } else if (silentAudioEl.src !== blobUrl) {
@@ -227,24 +250,30 @@ export function startSilentAudioKeepAlive(info?: Partial<MediaSessionInfo>): voi
     updateMediaSessionMetadata();
 
     silentAudioEl.play().then(() => {
+      consecutivePlayFailures = 0;
       if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'playing';
+        syncMediaSessionPositionState();
       }
     }).catch(() => {
       // Browsers require user interaction before autoplay
       const playOnUserAction = () => {
         if (silentAudioEl && isKeepAliveActive) {
           silentAudioEl.play().then(() => {
+            consecutivePlayFailures = 0;
             if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
               navigator.mediaSession.playbackState = 'playing';
+              syncMediaSessionPositionState();
             }
           }).catch(() => {});
         }
         window.removeEventListener('click', playOnUserAction);
         window.removeEventListener('touchstart', playOnUserAction);
+        window.removeEventListener('pointerdown', playOnUserAction);
       };
       window.addEventListener('click', playOnUserAction, { once: true });
       window.addEventListener('touchstart', playOnUserAction, { once: true });
+      window.addEventListener('pointerdown', playOnUserAction, { once: true });
     });
   } catch {}
 }
@@ -258,26 +287,38 @@ export function pauseKeepAliveAudio(): void {
       }
     } catch {}
   }
-  // Even when paused via function, automatically restart after 1.2s to prevent phone from killing chat
+  // When paused, automatically check and restart after 2.5s unless another app has taken focus
   if (isKeepAliveActive) {
     if (autoRevivalTimer) clearTimeout(autoRevivalTimer);
     autoRevivalTimer = setTimeout(() => {
       if (isKeepAliveActive && silentAudioEl?.paused) {
         resumeKeepAliveAudio();
       }
-    }, 1200);
+    }, 2500);
   }
 }
 
 export function resumeKeepAliveAudio(): void {
-  isKeepAliveActive = true;
+  if (!isKeepAliveActive) return;
   if (silentAudioEl) {
     try {
       silentAudioEl.play().then(() => {
+        consecutivePlayFailures = 0;
         if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
           navigator.mediaSession.playbackState = 'playing';
+          syncMediaSessionPositionState();
         }
-      }).catch(() => {});
+      }).catch((_err) => {
+        consecutivePlayFailures++;
+        // If another app (WhatsApp, YouTube, Call) has audio focus, back off gracefully
+        const backoffMs = consecutivePlayFailures > 2 ? 8000 : 3500;
+        if (autoRevivalTimer) clearTimeout(autoRevivalTimer);
+        autoRevivalTimer = setTimeout(() => {
+          if (isKeepAliveActive && silentAudioEl?.paused) {
+            resumeKeepAliveAudio();
+          }
+        }, backoffMs);
+      });
     } catch {}
   } else {
     startSilentAudioKeepAlive();
@@ -335,7 +376,10 @@ export function startHeartbeatWorker(socket: Socket): void {
         if (!timer) {
           timer = setInterval(function() {
             self.postMessage('tick');
-          }, 8000);
+            try {
+              fetch('/api/keepalive', { cache: 'no-store' }).catch(function(){});
+            } catch(e){}
+          }, 4500);
         }
       } else if (e.data === 'stop') {
         if (timer) {
@@ -356,8 +400,8 @@ export function startHeartbeatWorker(socket: Socket): void {
       if (e.data === 'tick' && activeSocket) {
         if (activeSocket.connected) {
           activeSocket.emit('keepAlivePing', { timestamp: Date.now() });
-        } else {
-          // If disconnected during background sleep, initiate immediate reconnect
+        } else if (activeSocket.disconnected) {
+          // If socket disconnected during background sleep, trigger clean reconnect
           activeSocket.connect();
         }
 
@@ -398,7 +442,7 @@ export function startHeartbeatWorker(socket: Socket): void {
           }
         }
       }
-    }, 10000);
+    }, 6000);
   }
 }
 
@@ -447,18 +491,22 @@ export function setupVisibilityResync(socket: Socket, onWake?: (wasDisconnected:
     if (activeSocket) {
       const wasDisconnected = !activeSocket.connected;
       if (wasDisconnected) {
-        // Socket was disconnected: reconnect and re-sync session
-        activeSocket.connect();
+        // Socket was disconnected: reconnect cleanly if not already connecting
+        if (activeSocket.disconnected) {
+          activeSocket.connect();
+        }
       } else {
         // Socket is ALREADY connected! Send lightweight keepAlive ping
         activeSocket.emit('keepAlivePing', { timestamp: Date.now() });
       }
       // Return immediately to green online dot (متواجد ونشط 🟢)
-      activeSocket.emit('userPresenceChange', { state: 'online' });
+      if (activeSocket.connected) {
+        activeSocket.emit('userPresenceChange', { state: 'online' });
+      }
 
       const now = Date.now();
-      // Debounce and only invoke onWake if socket was disconnected OR user was away for over 15 seconds
-      if (onWake && (wasDisconnected || elapsedBgSeconds >= 15) && (now - lastWakeSyncAt > 5000)) {
+      // Debounce and invoke onWake to sync missed messages or handle restore
+      if (onWake && (now - lastWakeSyncAt > 3000)) {
         lastWakeSyncAt = now;
         onWake(wasDisconnected, elapsedBgSeconds);
       }
