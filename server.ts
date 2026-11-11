@@ -429,6 +429,15 @@ export interface StoredMessage {
   nameColor?: string;
   textColor?: string;
   nameGradient?: string;
+  giftBadges?: string[];
+  isGiftAnnouncement?: boolean;
+  giftInfo?: {
+    fromUsername: string;
+    toUsername: string;
+    giftTitle: string;
+    giftUrl: string;
+    giftMessage?: string;
+  };
   isEdited?: boolean;
   isDeleted?: boolean;
   deletedBy?: string;
@@ -4023,6 +4032,143 @@ io.on('connection', (socket) => {
     socket.emit('systemAlert', `تمت إزالة الوسام الشرفي من [${cleanUser}].`);
   });
 
+  // إهداء هدية فاخرة من عضو لآخر مع حفظها والظهور الدائم بجانب اسمه والإشعار والاحتفال
+  socket.on('sendMemberGift', ({
+    targetUsername,
+    giftUrl,
+    giftTitle,
+    giftMessage
+  }: {
+    targetUsername: string;
+    giftUrl: string;
+    giftTitle: string;
+    giftMessage?: string;
+  }) => {
+    const actor = users.find((u) => u.id === socket.id);
+    if (!actor) return;
+    const cleanTarget = sanitizeText(targetUsername)?.trim();
+    if (!cleanTarget || !giftUrl) return;
+
+    // 1. Update online user records (تحديث العضو إذا كان متصلاً حالياً)
+    users.forEach((u) => {
+      if (u.username.toLowerCase() === cleanTarget.toLowerCase()) {
+        if (!u.giftBadges) u.giftBadges = [];
+        // Put newly gifted item at index 0 so it's the active companion gift beside avatar
+        u.giftBadges = [giftUrl, ...u.giftBadges.filter((g) => g !== giftUrl)];
+      }
+    });
+
+    // 2. Persist in registered members database (حفظ دائم بالسيرفر)
+    if (!registeredMembers[cleanTarget]) {
+      registeredMembers[cleanTarget] = {
+        password: '123',
+        role: 'member',
+        flag: '🇾🇪',
+        statusQuote: 'عضو في حسان برو',
+        likes: 1,
+        points: 10,
+        giftBadges: [giftUrl]
+      };
+    } else {
+      if (!registeredMembers[cleanTarget].giftBadges) registeredMembers[cleanTarget].giftBadges = [];
+      registeredMembers[cleanTarget].giftBadges = [giftUrl, ...registeredMembers[cleanTarget].giftBadges!.filter((g) => g !== giftUrl)];
+    }
+    saveMembers();
+
+    // 3. Broadcast updated giftBadges across all clients
+    const finalGifts = registeredMembers[cleanTarget]?.giftBadges || [giftUrl];
+    io.emit('userStyleUpdated', {
+      username: cleanTarget,
+      giftBadges: finalGifts
+    });
+
+    const targetOnline = users.find((u) => u.username.toLowerCase() === cleanTarget.toLowerCase());
+    if (targetOnline?.room) {
+      broadcastRoomUsers(targetOnline.room);
+    }
+    broadcastAllUsers();
+
+    // 4. Send direct real-time alert to recipient socket
+    for (const s of io.sockets.sockets.values()) {
+      const sUser = users.find((u) => u.id === s.id);
+      if (sUser && sUser.username.toLowerCase() === cleanTarget.toLowerCase()) {
+        s.emit('giftReceivedAlert', {
+          fromUsername: actor.username,
+          fromAvatar: actor.avatarUrl,
+          giftTitle: giftTitle || 'هدية فاخرة',
+          giftUrl,
+          giftMessage: giftMessage || 'مع خالص التقدير والمودة 🌹'
+        });
+      }
+    }
+
+    // 5. Broadcast celebratory announcement in the room
+    const targetRoom = actor.room || targetOnline?.room || 'الغرفة العامة';
+    const cleanMsg = giftMessage ? sanitizeText(giftMessage)?.trim() : '';
+    const giftAnnouncementText = `🎁✨ أهدى [${actor.username}] هدية فاخرة [${giftTitle || 'وسام تقديري'}] إلى صاحب الحساب المحترم [${cleanTarget}]!${cleanMsg ? `\n💌 الإهداء: "${cleanMsg}"` : ''}`;
+
+    const announcementMsg: StoredMessage = {
+      id: `gift-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      room: targetRoom,
+      username: 'نظام الهدايا 🎁',
+      avatarUrl: giftUrl,
+      text: giftAnnouncementText,
+      time: getCurrentTimeString(),
+      timestamp: Date.now(),
+      badge: 'إهداء هدية 🎁',
+      badgeColor: 'bg-gradient-to-r from-amber-500 via-rose-500 to-amber-600 text-white shadow-xs',
+      nameColor: '#d97706',
+      isGiftAnnouncement: true,
+      giftBadges: [giftUrl],
+      giftInfo: {
+        fromUsername: actor.username,
+        toUsername: cleanTarget,
+        giftTitle: giftTitle || 'هدية فاخرة',
+        giftUrl,
+        giftMessage: cleanMsg
+      }
+    };
+
+    chatHistory.push(announcementMsg);
+    pruneRoomChatHistory(targetRoom);
+    saveHistory();
+
+    io.to(targetRoom).emit('message', announcementMsg);
+
+    logMonitorEvent('likes', `أهدى [${actor.username}] هدية [${giftTitle || 'هدية'}] إلى [${cleanTarget}]`, actor.username, cleanTarget);
+    socket.emit('systemAlert', `تم إهداء وتثبيت [${giftTitle || 'الهدية'}] لـ [${cleanTarget}] بنجاح 🎁✨`);
+  });
+
+  // تعيين الهدية النشطة المرافقة للاسم من قائمة الهدايا المستلمة
+  socket.on('setActiveMemberGift', ({ username, giftUrl }: { username: string; giftUrl: string }) => {
+    const actor = users.find((u) => u.id === socket.id);
+    if (!actor) return;
+    const cleanUser = sanitizeText(username)?.trim();
+    if (!cleanUser || !giftUrl) return;
+    if (actor.username.toLowerCase() !== cleanUser.toLowerCase() && actor.role !== 'admin' && actor.role !== 'super') {
+      return;
+    }
+
+    users.forEach((u) => {
+      if (u.username.toLowerCase() === cleanUser.toLowerCase()) {
+        if (!u.giftBadges) u.giftBadges = [];
+        u.giftBadges = [giftUrl, ...u.giftBadges.filter((g) => g !== giftUrl)];
+      }
+    });
+
+    if (registeredMembers[cleanUser] && registeredMembers[cleanUser].giftBadges) {
+      registeredMembers[cleanUser].giftBadges = [giftUrl, ...registeredMembers[cleanUser].giftBadges!.filter((g) => g !== giftUrl)];
+      saveMembers();
+    }
+
+    io.emit('userStyleUpdated', {
+      username: cleanUser,
+      giftBadges: registeredMembers[cleanUser]?.giftBadges || [giftUrl]
+    });
+    broadcastAllUsers();
+    socket.emit('systemAlert', 'تم تثبيت هديتك المرافقة لاسمك بنجاح 🎁✨');
+  });
+
   // General Welcome Settings Listeners (إدارة الرسائل الترحيبية العامة للشات من لوحة التحكم)
   socket.on('getGeneralWelcome', () => {
     socket.emit('generalWelcomeUpdated', generalWelcomeSettings);
@@ -6532,7 +6678,8 @@ io.on('connection', (socket) => {
       reactions: {},
       nameColor: user.nameColor,
       textColor: user.textColor,
-      nameGradient: user.nameGradient
+      nameGradient: user.nameGradient,
+      giftBadges: user.giftBadges
     };
 
     chatHistory.push(messageObj);

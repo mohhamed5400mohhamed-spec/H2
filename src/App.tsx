@@ -175,6 +175,7 @@ import {
   EmblemType,
   EmblemsConfig,
   EmojiSizeSetting,
+  DEFAULT_EMBLEMS,
   DEFAULT_EMBLEMS_CONFIG,
   DEFAULT_FALCON_CHAT_BANNER,
   DEFAULT_FALCON_AVATAR_ICON,
@@ -721,6 +722,18 @@ export default function App() {
   const [bannerPickerTargetUser, setBannerPickerTargetUser] = useState<User | null>(null);
   const [customBannerUrlInput, setCustomBannerUrlInput] = useState<string>('');
   const [emojiPickerTab, setEmojiPickerTab] = useState<'custom' | 'stickers' | 'vintage'>('custom');
+
+  // Member Gifting System State (نظام إهداء الهدايا الفاخرة وتثبيتها كمرافقة للاسم بجانب الصورة)
+  const [giftModalTarget, setGiftModalTarget] = useState<User | null>(null);
+  const [selectedGiftId, setSelectedGiftId] = useState<string>('');
+  const [giftDedicationMessage, setGiftDedicationMessage] = useState<string>('مع أطيب التحيات وخالص التقدير 🌹');
+  const [giftReceivedAlert, setGiftReceivedAlert] = useState<{
+    fromUsername: string;
+    fromAvatar?: string;
+    giftTitle: string;
+    giftUrl: string;
+    giftMessage?: string;
+  } | null>(null);
 
   // SIDE MODALS / PANELS (Matches screenshots: they take ~78% width, leaving background chat visible!)
   const [activeDrawer, setActiveDrawer] = useState<'none' | 'users' | 'rooms' | 'pm' | 'wall' | 'settings' | 'monitor' | 'profile'>('none');
@@ -2869,10 +2882,10 @@ export default function App() {
         prev.map((u) => (matchName(u.username) ? { ...u, statusQuote: data.statusQuote !== undefined ? data.statusQuote : u.statusQuote, avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : u.avatarUrl, nameColor: data.nameColor, textColor: data.textColor, nameGradient: data.nameGradient, profileBg: data.profileBg, nameBannerUrl: data.nameBannerUrl !== undefined ? data.nameBannerUrl : u.nameBannerUrl, giftBadges: data.giftBadges !== undefined ? data.giftBadges : u.giftBadges } : u))
       );
       setAllRegisteredMembers((prev) =>
-        prev.map((m) => (matchName(m.username) ? { ...m, statusQuote: data.statusQuote !== undefined ? data.statusQuote : m.statusQuote, nameBannerUrl: data.nameBannerUrl !== undefined ? data.nameBannerUrl : m.nameBannerUrl } : m))
+        prev.map((m) => (matchName(m.username) ? { ...m, statusQuote: data.statusQuote !== undefined ? data.statusQuote : m.statusQuote, nameBannerUrl: data.nameBannerUrl !== undefined ? data.nameBannerUrl : m.nameBannerUrl, giftBadges: data.giftBadges !== undefined ? data.giftBadges : m.giftBadges } : m))
       );
       setCurrentUser((prev) => (prev && matchName(prev.username) ? { ...prev, statusQuote: data.statusQuote !== undefined ? data.statusQuote : prev.statusQuote, nameColor: data.nameColor, textColor: data.textColor, nameGradient: data.nameGradient, profileBg: data.profileBg, nameBannerUrl: data.nameBannerUrl !== undefined ? data.nameBannerUrl : prev.nameBannerUrl, giftBadges: data.giftBadges !== undefined ? data.giftBadges : prev.giftBadges } : prev));
-      setProfileTargetUser((prev) => (prev && matchName(prev.username) ? { ...prev, statusQuote: data.statusQuote !== undefined ? data.statusQuote : prev.statusQuote, nameBannerUrl: data.nameBannerUrl !== undefined ? data.nameBannerUrl : prev.nameBannerUrl } : prev));
+      setProfileTargetUser((prev) => (prev && matchName(prev.username) ? { ...prev, statusQuote: data.statusQuote !== undefined ? data.statusQuote : prev.statusQuote, nameBannerUrl: data.nameBannerUrl !== undefined ? data.nameBannerUrl : prev.nameBannerUrl, giftBadges: data.giftBadges !== undefined ? data.giftBadges : prev.giftBadges } : prev));
       if (data.statusQuote !== undefined && matchName(currentUserRef.current?.username)) {
         setSettingQuote(data.statusQuote);
       }
@@ -2947,6 +2960,35 @@ export default function App() {
       setTimeout(() => {
         setFloatingLikeAlert((curr) => (curr?.fromUsername === data.fromUsername ? null : curr));
       }, 7000);
+    });
+
+    // Member Gifting Real-Time Direct Alert (استلام هدية تكريمية مباشرة)
+    s.on('giftReceivedAlert', (data: {
+      fromUsername: string;
+      fromAvatar?: string;
+      giftTitle: string;
+      giftUrl: string;
+      giftMessage?: string;
+    }) => {
+      setGiftReceivedAlert(data);
+      sounds.playCrownFanfare();
+      try {
+        confetti({
+          particleCount: 90,
+          spread: 85,
+          origin: { y: 0.55 }
+        });
+      } catch (e) {}
+      showToast(`🎁✨ حصلت على هدية فاخرة من [${data.fromUsername}]: ${data.giftTitle}`, 'success');
+
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`🎁 هدية جديدة من ${data.fromUsername}!`, {
+            body: `أهداك [${data.giftTitle}]: ${data.giftMessage || 'مع أطيب التحيات وخالص التقدير 🌹'}`,
+            icon: data.giftUrl || '/icon-192.png'
+          });
+        } catch (e) {}
+      }
     });
 
     // Chat Shortcuts listener
@@ -6039,6 +6081,20 @@ export default function App() {
             <div className="min-w-0">
               <div className="font-bold text-xs flex items-center gap-1 leading-tight">
                 {(() => {
+                  const partnerGifts = selectedPmUser.giftBadges || rosterUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase())?.giftBadges || allRegisteredMembers.find((m) => m.username.toLowerCase() === selectedPmUser.username.toLowerCase())?.giftBadges;
+                  if (partnerGifts && partnerGifts.length > 0) {
+                    return (
+                      <img
+                        src={partnerGifts[0]}
+                        alt="هدية"
+                        title="هدية تكريمية مرافقة للاسم"
+                        className="w-4 h-4 object-contain inline-block shrink-0 drop-shadow-xs"
+                      />
+                    );
+                  }
+                  return null;
+                })()}
+                {(() => {
                   const bannerUrl = getUserBanner(selectedPmUser.username, selectedPmUser.nameBannerUrl);
                   if (bannerUrl) {
                     return (
@@ -7867,17 +7923,27 @@ export default function App() {
                 >
                   {isOccupied ? (
                     <div className="relative w-full h-full flex flex-col items-center justify-center">
-                      <img
-                        src={slot.user?.avatarUrl || falconIcon}
-                        alt={slot.user?.username}
-                        className={`w-4 h-4 rounded-full object-cover border transition-all ${
-                          isSpeaking
-                            ? 'border-amber-300 ring-1 ring-emerald-400 animate-pulse scale-105'
-                            : isMe
-                            ? 'border-emerald-300'
-                            : 'border-slate-400'
-                        }`}
-                      />
+                      <div className="flex items-center gap-0.5 justify-center">
+                        <img
+                          src={slot.user?.avatarUrl || falconIcon}
+                          alt={slot.user?.username}
+                          className={`w-3.5 h-3.5 rounded-full object-cover border transition-all ${
+                            isSpeaking
+                              ? 'border-amber-300 ring-1 ring-emerald-400 animate-pulse scale-105'
+                              : isMe
+                              ? 'border-emerald-300'
+                              : 'border-slate-400'
+                          }`}
+                        />
+                        {slot.user?.giftBadges && slot.user.giftBadges.length > 0 && (
+                          <img
+                            src={slot.user.giftBadges[0]}
+                            alt="هدية"
+                            title="هدية مرافقة"
+                            className="w-3 h-3 object-contain shrink-0 drop-shadow-xs"
+                          />
+                        )}
+                      </div>
                       {(() => {
                         const slotBanner = slot.user ? getUserBanner(slot.user.username, slot.user.nameBannerUrl) : undefined;
                         if (slotBanner) {
@@ -8895,6 +8961,24 @@ export default function App() {
                           {msg.badge}
                         </span>
                       )}
+                      {/* Companion Gift Badge - positioned right beside the avatar on the same line as the name/banner */}
+                      {(() => {
+                        const companionGift = (msg.giftBadges && msg.giftBadges.length > 0)
+                          ? msg.giftBadges[0]
+                          : rosterUsers.find((u) => u.username.toLowerCase() === msg.username.toLowerCase())?.giftBadges?.[0]
+                            || allConnectedUsers.find((u) => u.username.toLowerCase() === msg.username.toLowerCase())?.giftBadges?.[0]
+                            || allRegisteredMembers.find((m) => m.username.toLowerCase() === msg.username.toLowerCase())?.giftBadges?.[0];
+                        if (!companionGift) return null;
+                        return (
+                          <img
+                            src={companionGift}
+                            alt="هدية"
+                            title="هدية تكريمية مرافقة للاسم"
+                            onClick={() => openUserProfileByName(msg.username)}
+                            className="w-4 h-4 sm:w-5 sm:h-5 max-w-[20px] max-h-[20px] object-contain inline-block drop-shadow-sm select-none shrink-0 align-middle hover:scale-125 transition-transform cursor-pointer"
+                          />
+                        );
+                      })()}
                       {(() => {
                         const bannerUrl = getUserBanner(msg.username, msg.nameBannerUrl);
                         if (bannerUrl) {
@@ -9349,6 +9433,37 @@ export default function App() {
                           >
                             إلغاء
                           </button>
+                        </div>
+                      </div>
+                    ) : msg.isGiftAnnouncement && msg.giftInfo ? (
+                      <div className="my-1.5 p-2 sm:p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 border-2 border-amber-400 shadow-md text-right">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <div className="relative shrink-0">
+                            <img
+                              src={msg.giftInfo.giftUrl}
+                              alt="هدية"
+                              className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow-md select-none animate-bounce duration-1000"
+                            />
+                            <span className="absolute -top-1 -right-1 text-xs">✨</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-black text-xs sm:text-sm text-amber-900 dark:text-amber-200 flex items-center gap-1.5 flex-wrap">
+                              <span>🎁 أهدى [{msg.giftInfo.fromUsername}]</span>
+                              <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 text-[10px] sm:text-[11px] font-black shadow-xs">
+                                {msg.giftInfo.giftTitle}
+                              </span>
+                              <span>إلى [{msg.giftInfo.toUsername}] 💎</span>
+                            </div>
+                            {msg.giftInfo.giftMessage && (
+                              <div className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 mt-1 italic font-medium bg-black/5 dark:bg-white/5 px-2 py-1 rounded-lg border border-amber-400/30">
+                                💌 "{msg.giftInfo.giftMessage}"
+                              </div>
+                            )}
+                            <div className="text-[9px] sm:text-[10px] text-emerald-700 dark:text-emerald-300 font-bold mt-1 flex items-center gap-1">
+                              <span>✓</span>
+                              <span>تم تثبيت الهدية كمرافقة لاسم العضو بجانب صورته الشخصية في كل مكان بالشات ✨</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -10587,6 +10702,15 @@ export default function App() {
                         </div>
                         <div className="min-w-0 text-right">
                           <div className={`font-bold text-xs ${curTheme.accentText} flex items-center gap-1 flex-wrap`}>
+                            {/* Companion Gift Badge - right beside avatar on same line as banner/username */}
+                            {u.giftBadges && u.giftBadges.length > 0 && (
+                              <img
+                                src={u.giftBadges[0]}
+                                alt="هدية"
+                                title="هدية تكريمية مرافقة للاسم"
+                                className="w-4 h-4 sm:w-5 sm:h-5 object-contain inline-block drop-shadow-xs shrink-0 select-none align-middle animate-pulse"
+                              />
+                            )}
                             {(() => {
                               const banner = getUserBanner(u.username, u.nameBannerUrl);
                               if (banner) {
@@ -10601,15 +10725,15 @@ export default function App() {
                               }
                               return <span>{u.username}</span>;
                             })()}
-                            {u.giftBadges && u.giftBadges.length > 0 && (
-                              <span className="inline-flex items-center gap-1 mx-0.5 align-middle">
-                                {u.giftBadges.map((badgeUrl, bIdx) => (
+                            {u.giftBadges && u.giftBadges.length > 1 && (
+                              <span className="inline-flex items-center gap-0.5 mx-0.5 align-middle">
+                                {u.giftBadges.slice(1).map((badgeUrl, bIdx) => (
                                   <img
                                     key={bIdx}
                                     src={badgeUrl}
                                     alt="وسام"
                                     title="وسام شرفي وهدية تكريمية"
-                                    className="w-4 h-4 object-contain inline-block drop-shadow-xs"
+                                    className="w-3.5 h-3.5 object-contain inline-block drop-shadow-xs opacity-90"
                                   />
                                 ))}
                               </span>
@@ -10692,6 +10816,15 @@ export default function App() {
                           </div>
                           <div className="min-w-0 text-right">
                             <div className={`font-bold text-xs ${curTheme.accentText} flex items-center gap-1 flex-wrap`}>
+                              {/* Companion Gift Badge - right beside avatar on same line as banner/username */}
+                              {u.giftBadges && u.giftBadges.length > 0 && (
+                                <img
+                                  src={u.giftBadges[0]}
+                                  alt="هدية"
+                                  title="هدية تكريمية مرافقة للاسم"
+                                  className="w-4 h-4 sm:w-5 sm:h-5 object-contain inline-block drop-shadow-xs shrink-0 select-none align-middle animate-pulse"
+                                />
+                              )}
                               {(() => {
                                 const banner = getUserBanner(u.username, u.nameBannerUrl);
                                 if (banner) {
@@ -10706,15 +10839,15 @@ export default function App() {
                                 }
                                 return <span>{u.username}</span>;
                               })()}
-                              {u.giftBadges && u.giftBadges.length > 0 && (
+                              {u.giftBadges && u.giftBadges.length > 1 && (
                                 <span className="inline-flex items-center gap-0.5 mx-0.5 align-middle">
-                                  {u.giftBadges.map((badgeUrl, bIdx) => (
+                                  {u.giftBadges.slice(1).map((badgeUrl, bIdx) => (
                                     <img
                                       key={bIdx}
                                       src={badgeUrl}
                                       alt="وسام"
                                       title="وسام شرفي"
-                                      className="w-3.5 h-3.5 object-contain inline-block drop-shadow-xs"
+                                      className="w-3.5 h-3.5 object-contain inline-block drop-shadow-xs opacity-90"
                                     />
                                   ))}
                                 </span>
@@ -10810,6 +10943,15 @@ export default function App() {
                           </div>
                           <div className="min-w-0 text-right">
                             <div className={`font-bold text-xs ${curTheme.accentText} flex items-center gap-1 flex-wrap`}>
+                              {/* Companion Gift Badge - right beside avatar on same line as banner/username */}
+                              {u.giftBadges && u.giftBadges.length > 0 && (
+                                <img
+                                  src={u.giftBadges[0]}
+                                  alt="هدية"
+                                  title="هدية تكريمية مرافقة للاسم"
+                                  className="w-4 h-4 sm:w-5 sm:h-5 object-contain inline-block drop-shadow-xs shrink-0 select-none align-middle animate-pulse"
+                                />
+                              )}
                               {(() => {
                                 const banner = getUserBanner(u.username, u.nameBannerUrl);
                                 if (banner) {
@@ -10824,15 +10966,15 @@ export default function App() {
                                 }
                                 return <span>{u.username}</span>;
                               })()}
-                              {u.giftBadges && u.giftBadges.length > 0 && (
+                              {u.giftBadges && u.giftBadges.length > 1 && (
                                 <span className="inline-flex items-center gap-0.5 mx-0.5 align-middle">
-                                  {u.giftBadges.map((badgeUrl, bIdx) => (
+                                  {u.giftBadges.slice(1).map((badgeUrl, bIdx) => (
                                     <img
                                       key={bIdx}
                                       src={badgeUrl}
                                       alt="وسام"
                                       title="وسام شرفي"
-                                      className="w-3.5 h-3.5 object-contain inline-block drop-shadow-xs"
+                                      className="w-3.5 h-3.5 object-contain inline-block drop-shadow-xs opacity-90"
                                     />
                                   ))}
                                 </span>
@@ -10931,6 +11073,15 @@ export default function App() {
                         </div>
                         <div className="min-w-0 text-right">
                           <div className="font-bold text-xs text-slate-300 flex items-center gap-1 flex-wrap">
+                            {/* Companion Gift Badge - right beside avatar on same line as banner/username */}
+                            {m.giftBadges && m.giftBadges.length > 0 && (
+                              <img
+                                src={m.giftBadges[0]}
+                                alt="هدية"
+                                title="هدية تكريمية مرافقة للاسم"
+                                className="w-4 h-4 sm:w-5 sm:h-5 object-contain inline-block drop-shadow-xs shrink-0 select-none align-middle animate-pulse"
+                              />
+                            )}
                             {(() => {
                               const banner = getUserBanner(m.username, m.nameBannerUrl);
                               if (banner) {
@@ -10945,15 +11096,15 @@ export default function App() {
                               }
                               return <span>{m.username}</span>;
                             })()}
-                            {m.giftBadges && m.giftBadges.length > 0 && (
+                            {m.giftBadges && m.giftBadges.length > 1 && (
                               <span className="inline-flex items-center gap-0.5 mx-0.5 align-middle">
-                                {m.giftBadges.map((badgeUrl, bIdx) => (
+                                {m.giftBadges.slice(1).map((badgeUrl, bIdx) => (
                                   <img
                                     key={bIdx}
                                     src={badgeUrl}
                                     alt="وسام"
                                     title="وسام شرفي"
-                                    className="w-3.5 h-3.5 object-contain inline-block drop-shadow-xs"
+                                    className="w-3.5 h-3.5 object-contain inline-block drop-shadow-xs opacity-90"
                                   />
                                 ))}
                               </span>
@@ -13303,6 +13454,58 @@ export default function App() {
 
                   return (
                     <div className="space-y-3">
+                      {/* Received Gifts & Companion Badge Selection (معرض الهدايا التكريمية واختيار الهدية المرافقة للاسم) */}
+                      {profileTargetUser.giftBadges && profileTargetUser.giftBadges.length > 0 && (
+                        <div className="p-2.5 sm:p-3 bg-gradient-to-b from-amber-500/10 to-amber-500/5 border border-amber-400/40 rounded-xl space-y-2 text-right">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
+                              <Gift className="w-4 h-4 text-amber-600" />
+                              <span>الهدايا التكريمية المستلمة ({profileTargetUser.giftBadges.length}):</span>
+                            </span>
+                            <span className="text-[10px] text-amber-700 font-medium">
+                              {isSelf ? 'انقر على أي هدية لتثبيتها كمرافقة لاسمك ✨' : 'هدايا تم إهداؤها لهذا العضو 🎁'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                            {profileTargetUser.giftBadges.map((badgeUrl, bIdx) => {
+                              const isActiveCompanion = bIdx === 0;
+                              return (
+                                <div
+                                  key={bIdx}
+                                  onClick={() => {
+                                    if (isSelf || isViewerAdmin) {
+                                      socket?.emit('setActiveMemberGift', {
+                                        username: profileTargetUser.username,
+                                        giftUrl: badgeUrl
+                                      });
+                                      showToast('تم تحديد وتثبيت الهدية المرافقة لاسمك بنجاح ✨', 'success');
+                                    }
+                                  }}
+                                  className={`relative p-1.5 rounded-xl border flex flex-col items-center justify-center shrink-0 cursor-pointer transition-all ${
+                                    isActiveCompanion
+                                      ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-400/60 shadow-sm scale-105'
+                                      : 'bg-white/80 border-slate-200 hover:border-amber-300 hover:bg-amber-50/50'
+                                  }`}
+                                  title={isActiveCompanion ? 'الهدية النشطة المرافقة للاسم حالياً' : (isSelf || isViewerAdmin ? 'انقر لتفعيل هذه الهدية كمرافقة للاسم' : 'هدية تكريمية')}
+                                >
+                                  <img
+                                    src={badgeUrl}
+                                    alt="هدية"
+                                    className="w-8 h-8 object-contain drop-shadow-xs"
+                                  />
+                                  {isActiveCompanion && (
+                                    <span className="mt-1 text-[8px] font-black text-amber-900 bg-amber-300 px-1 rounded-full">
+                                      مرافقة للاسم ✓
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Social Actions (Available for all members) */}
                       <div className="space-y-1.5">
                         <div className="text-xs font-bold text-slate-700">تفاعل اجتماعي:</div>
@@ -13343,14 +13546,17 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => {
-                              socket?.emit('chatMessage', { text: `🎁✨ أهدى [${currentUser.username}] هدية فاخرة 💎 لصاحب الحساب المحترم [${profileTargetUser.username}] مع خالص التقدير!` });
-                              showToast(`تم إرسال الهدية لـ ${profileTargetUser.username} 💎`, 'success');
-                              confetti({ particleCount: 50, spread: 70 });
+                              setGiftModalTarget(profileTargetUser);
+                              const gifts = emblemsConfig.items.filter((i) => i.type === 'gift');
+                              const fallback = DEFAULT_EMBLEMS.filter((i) => i.type === 'gift');
+                              const firstGift = gifts[0] || fallback[0];
+                              if (firstGift) setSelectedGiftId(firstGift.id);
                             }}
-                            className="p-2 sm:p-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center gap-1 text-amber-700 cursor-pointer min-w-0 truncate"
+                            className="p-2 sm:p-2.5 rounded-lg bg-gradient-to-r from-amber-500/15 via-yellow-500/20 to-amber-500/15 hover:from-amber-500/25 hover:to-amber-500/25 border-2 border-amber-400 flex items-center justify-center gap-1 text-amber-900 font-black cursor-pointer min-w-0 truncate shadow-2xs active:scale-95 transition-all"
+                            title="إهداء هدية فاخرة وتثبيتها مرافقة للاسم"
                           >
-                            <Gift className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">💎 هدية</span>
+                            <Gift className="w-3.5 h-3.5 shrink-0 text-amber-600 animate-bounce" />
+                            <span className="truncate">💎 إهداء هدية</span>
                           </button>
 
                           <button
@@ -15085,6 +15291,262 @@ export default function App() {
                   إغلاق
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MEMBER GIFT SELECTION MODAL (نافذة إهداء الهدايا الفاخرة وتثبيتها مرافقة للاسم)
+           ========================================================================= */}
+        {giftModalTarget && (
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setGiftModalTarget(null);
+            }}
+            className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-3 sm:p-4 backdrop-blur-md animate-in fade-in"
+            dir="rtl"
+          >
+            <div className={`w-full max-w-lg ${curTheme.drawerBg || 'bg-slate-900'} border-2 border-amber-500 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 text-slate-100 text-right`}>
+              {/* Header */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-600 via-rose-600 to-amber-700 border-b border-amber-400/40 flex items-center justify-between shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 text-amber-200 border border-white/30 flex items-center justify-center shrink-0 shadow-xs">
+                    <Gift className="w-6 h-6 text-yellow-300 animate-bounce" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm sm:text-base text-white flex items-center gap-1.5">
+                      <span>إهداء هدية تكريمية فاخرة 🎁✨</span>
+                    </h3>
+                    <p className="text-[11px] text-amber-100 font-medium">
+                      إلى صاحب الحساب المحترم: <strong className="text-yellow-300">[{giftModalTarget.username}]</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGiftModalTarget(null)}
+                  className="w-8 h-8 rounded-lg bg-black/40 hover:bg-black/60 text-white flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-3 sm:p-4 overflow-y-auto modal-scroll-container space-y-3.5 flex-1">
+                {/* Note */}
+                <div className="p-2.5 bg-amber-500/10 border border-amber-400/30 rounded-xl text-xs text-amber-200 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    عند إرسال الهدية، ستظهر فوراً كمرافقة لاسم العضو بجانب صورته الشخصية في جميع أرجاء الشات (الرسائل، قائمة المتواجدين، المايك، البروفايل) وستصله في تنبيه خاص.
+                  </div>
+                </div>
+
+                {/* Gifts Grid */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                      <span>اختر الهدية من قائمة الرموز التكريمية:</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      (تدار الأيقونات من لوحة التحكم - الرموز)
+                    </span>
+                  </div>
+
+                  {(() => {
+                    const customGifts = emblemsConfig.items.filter((i) => i.type === 'gift');
+                    const defaultGifts = DEFAULT_EMBLEMS.filter((i) => i.type === 'gift');
+                    // Combine and deduplicate
+                    const allGiftsMap = new Map<string, EmblemItem>();
+                    [...customGifts, ...defaultGifts].forEach((g) => {
+                      if (!allGiftsMap.has(g.id)) allGiftsMap.set(g.id, g);
+                    });
+                    const availableGifts = Array.from(allGiftsMap.values());
+
+                    if (availableGifts.length === 0) {
+                      return (
+                        <div className="p-6 text-center text-slate-400 text-xs bg-black/30 rounded-xl border border-slate-800">
+                          لا توجد هدايا متاحة حالياً. يمكنك رفع وإضافة رموز هدايا جديدة من لوحة التحكم.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {availableGifts.map((gift) => {
+                          const isSelected = selectedGiftId === gift.id || (!selectedGiftId && gift === availableGifts[0]);
+                          return (
+                            <div
+                              key={gift.id}
+                              onClick={() => setSelectedGiftId(gift.id)}
+                              className={`p-2.5 rounded-xl border-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 relative group ${
+                                isSelected
+                                  ? 'bg-gradient-to-b from-amber-500/25 to-yellow-500/10 border-amber-400 ring-2 ring-amber-400/50 shadow-lg scale-102'
+                                  : 'bg-black/30 border-slate-700/80 hover:border-slate-500 hover:bg-black/50'
+                              }`}
+                            >
+                              <div className="relative w-12 h-12 flex items-center justify-center my-1">
+                                <img
+                                  src={gift.imageUrl}
+                                  alt={gift.title}
+                                  className={`w-11 h-11 object-contain drop-shadow-md transition-transform duration-200 group-hover:scale-110 ${
+                                    isSelected ? 'scale-110 animate-pulse' : ''
+                                  }`}
+                                />
+                                {isSelected && (
+                                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[10px] font-black shadow-xs">
+                                    ✓
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`text-[11px] font-bold line-clamp-1 mt-1 ${isSelected ? 'text-amber-200 font-black' : 'text-slate-300'}`}>
+                                {gift.title}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Dedication Message */}
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    💌 كلمة أو إهداء لطيف مع الهدية:
+                  </label>
+                  <input
+                    type="text"
+                    value={giftDedicationMessage}
+                    onChange={(e) => setGiftDedicationMessage(e.target.value)}
+                    placeholder="اكتب عبارة إهداء خاصة تظهر للجميع..."
+                    maxLength={100}
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white outline-none focus:border-amber-400"
+                  />
+                  {/* Preset Suggestions */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    {[
+                      'مع أطيب التحيات وخالص التقدير 🌹',
+                      'ألف مبروك التميز والتألق 🌟',
+                      'تستاهل كل خير وتقدير يا غالي 👑',
+                      'هدية متواضعة من القلب 💎',
+                      'صداقة دائمة ومحبة متبادلة ✨'
+                    ].map((preset, pIdx) => (
+                      <button
+                        key={pIdx}
+                        type="button"
+                        onClick={() => setGiftDedicationMessage(preset)}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 hover:bg-amber-600/30 hover:text-amber-300 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-3 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGiftModalTarget(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  إلغاء ✖
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const customGifts = emblemsConfig.items.filter((i) => i.type === 'gift');
+                    const defaultGifts = DEFAULT_EMBLEMS.filter((i) => i.type === 'gift');
+                    const allGifts = [...customGifts, ...defaultGifts];
+                    const chosen = allGifts.find((g) => g.id === selectedGiftId) || allGifts[0];
+
+                    if (!chosen) {
+                      showToast('يرجى اختيار هدية من القائمة أولاً', 'error');
+                      return;
+                    }
+
+                    socket?.emit('sendMemberGift', {
+                      targetUsername: giftModalTarget.username,
+                      giftUrl: chosen.imageUrl,
+                      giftTitle: chosen.title,
+                      giftMessage: giftDedicationMessage.trim()
+                    });
+
+                    try {
+                      confetti({
+                        particleCount: 60,
+                        spread: 70,
+                        origin: { y: 0.6 }
+                      });
+                    } catch (e) {}
+
+                    showToast(`تم إهداء وتثبيت [${chosen.title}] لـ [${giftModalTarget.username}] بنجاح 🎁✨`, 'success');
+                    setGiftModalTarget(null);
+                  }}
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:opacity-95 active:scale-95 text-slate-950 font-black rounded-xl text-xs sm:text-sm shadow-md flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <Gift className="w-4 h-4 fill-slate-950" />
+                  <span>إرسال وتثبيت الهدية الآن 🎁</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            GIFT RECEIVED POPUP CELEBRATION (تنبيه احتفالي فوري عند استلام هدية)
+           ========================================================================= */}
+        {giftReceivedAlert && (
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setGiftReceivedAlert(null);
+            }}
+            className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in"
+            dir="rtl"
+          >
+            <div className="w-full max-w-sm bg-gradient-to-b from-slate-900 via-slate-900 to-[#1e130c] border-2 border-amber-400 rounded-2xl shadow-2xl overflow-hidden p-5 text-center text-slate-100 relative animate-in zoom-in-95 space-y-4">
+              {/* Confetti / Sparkle Crown */}
+              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 p-1 shadow-lg shadow-amber-500/30 flex items-center justify-center">
+                <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center">
+                  <img
+                    src={giftReceivedAlert.giftUrl}
+                    alt={giftReceivedAlert.giftTitle}
+                    className="w-10 h-10 object-contain drop-shadow-md animate-bounce duration-1000"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-black text-amber-400 uppercase tracking-widest block mb-1">
+                  🎉 مبارك! لقد استلمت هدية جديدة 🎉
+                </span>
+                <h3 className="text-lg font-black text-white">
+                  {giftReceivedAlert.giftTitle}
+                </h3>
+                <p className="text-xs text-slate-300 mt-1">
+                  أهداها لك صاحب الحساب المحترم: <strong className="text-amber-300 font-black">[{giftReceivedAlert.fromUsername}]</strong>
+                </p>
+              </div>
+
+              {giftReceivedAlert.giftMessage && (
+                <div className="p-3 rounded-xl bg-white/5 border border-amber-400/30 text-xs italic text-amber-100 font-medium">
+                  💌 "{giftReceivedAlert.giftMessage}"
+                </div>
+              )}
+
+              <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-[11px] text-emerald-300 font-bold">
+                ✓ تم تثبيت هذه الهدية فوراً كمرافقة لاسمك بجانب صورتك الشخصية في جميع أرجاء الشات ✨
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setGiftReceivedAlert(null)}
+                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black rounded-xl text-sm shadow-md cursor-pointer transition-all active:scale-95"
+              >
+                شكراً جزيلاً 💖 (إغلاق)
+              </button>
             </div>
           </div>
         )}

@@ -206,6 +206,70 @@ export const DEFAULT_EMBLEMS: EmblemItem[] = [
     createdAt: Date.now() - 34000,
     createdBy: 'إدارة حسان برو'
   },
+  {
+    id: 'gift-supercar',
+    type: 'gift',
+    title: '🏎️ سيارة فارهة ملكية',
+    imageUrl: createGiftSvgDataUri('🏎️', '#7f1d1d', '#ef4444'),
+    createdAt: Date.now() - 33000,
+    createdBy: 'إدارة حسان برو'
+  },
+  {
+    id: 'gift-diamond-ring',
+    type: 'gift',
+    title: '💍 خاتم الألماس الملكي',
+    imageUrl: createGiftSvgDataUri('💍', '#0c4a6e', '#38bdf8'),
+    createdAt: Date.now() - 32000,
+    createdBy: 'إدارة حسان برو'
+  },
+  {
+    id: 'gift-bright-star',
+    type: 'gift',
+    title: '🌟 نجمة الشات الساطعة',
+    imageUrl: createGiftSvgDataUri('🌟', '#854d0e', '#fbbf24'),
+    createdAt: Date.now() - 31000,
+    createdBy: 'إدارة حسان برو'
+  },
+  {
+    id: 'gift-peace-dove',
+    type: 'gift',
+    title: '🕊️ حمامة السلام والمودة',
+    imageUrl: createGiftSvgDataUri('🕊️', '#1e293b', '#e2e8f0'),
+    createdAt: Date.now() - 30000,
+    createdBy: 'إدارة حسان برو'
+  },
+  {
+    id: 'gift-rolex-watch',
+    type: 'gift',
+    title: '⌚ ساعة رولكس الذهبية',
+    imageUrl: createGiftSvgDataUri('⌚', '#713f12', '#facc15'),
+    createdAt: Date.now() - 29000,
+    createdBy: 'إدارة حسان برو'
+  },
+  {
+    id: 'gift-royal-oud',
+    type: 'gift',
+    title: '🧴 عطر العود الملكي الفاخر',
+    imageUrl: createGiftSvgDataUri('🧴', '#4c1d95', '#c084fc'),
+    createdAt: Date.now() - 28000,
+    createdBy: 'إدارة حسان برو'
+  },
+  {
+    id: 'gift-arabic-coffee',
+    type: 'gift',
+    title: '☕ فنجان قهوة عربية أصيل',
+    imageUrl: createGiftSvgDataUri('☕', '#451a03', '#d97706'),
+    createdAt: Date.now() - 27000,
+    createdBy: 'إدارة حسان برو'
+  },
+  {
+    id: 'gift-honor-shield',
+    type: 'gift',
+    title: '🛡️ درع البطولة والشرف',
+    imageUrl: createGiftSvgDataUri('🛡️', '#1e3a8a', '#60a5fa'),
+    createdAt: Date.now() - 26000,
+    createdBy: 'إدارة حسان برو'
+  },
 
   // 3. الستيكرات التعبيرية (Stickers)
   {

@@ -171,6 +171,14 @@ export interface Message {
   avatarUrl?: string;
   nameBannerUrl?: string;
   giftBadges?: string[];
+  isGiftAnnouncement?: boolean;
+  giftInfo?: {
+    fromUsername: string;
+    toUsername: string;
+    giftTitle: string;
+    giftUrl: string;
+    giftMessage?: string;
+  };
   flag?: string;
   badge?: string;
   badgeColor?: string;
